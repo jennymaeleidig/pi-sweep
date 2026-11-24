@@ -11,7 +11,7 @@ test("wires linters, duplication, and zero-fanout into code sweeps", () => {
   );
   assert.deepEqual(
     detectorsFor("test").map((detector) => detector.name),
-    ["jscpd"],
+    ["eslint-jest", "jscpd-tests"],
   );
 });
 
