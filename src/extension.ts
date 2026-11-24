@@ -33,6 +33,7 @@ export interface SweepCommandOptions {
   kind: SweepKind;
   base?: string;
   fullAudit: boolean;
+  apply?: boolean;
 }
 
 const KINDS = new Set<SweepKind>(["sweep", "code", "test", "prose"]);
@@ -42,6 +43,7 @@ export function parseSweepArgs(args: string): SweepCommandOptions {
   let kind: SweepKind = "sweep";
   let base: string | undefined;
   let fullAudit = false;
+  let apply = false;
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
@@ -56,6 +58,8 @@ export function parseSweepArgs(args: string): SweepCommandOptions {
       index += 1;
     } else if (token === "--full-audit") {
       fullAudit = true;
+    } else if (token === "--apply") {
+      apply = true;
     } else if (KINDS.has(token as SweepKind)) {
       kind = token as SweepKind;
     } else {
@@ -63,7 +67,11 @@ export function parseSweepArgs(args: string): SweepCommandOptions {
     }
   }
 
-  return { kind, base, fullAudit };
+  const options: SweepCommandOptions = { kind, base, fullAudit };
+  if (apply) {
+    options.apply = true;
+  }
+  return options;
 }
 
 export function createPiRunner(pi: Pick<SweepHost, "exec">): CommandRunner {
@@ -76,7 +84,7 @@ export function createPiRunner(pi: Pick<SweepHost, "exec">): CommandRunner {
 export default function sweepExtension(pi: SweepHost): void {
   pi.registerCommand("sweep-report", {
     description:
-      "Run a report-only sweep (code, test, or prose) over the current change",
+      "Sweep code, test, or prose over the current change (report-only unless --apply)",
     handler: async (args, ctx) => {
       const options = parseSweepArgs(args);
       const result = await runSweep({
@@ -84,7 +92,8 @@ export default function sweepExtension(pi: SweepHost): void {
         cwd: ctx.cwd,
         base: options.base,
         fullAudit: options.fullAudit,
-        reportOnly: true,
+        reportOnly: options.apply !== true,
+        apply: options.apply,
         runner: createPiRunner(pi),
       });
       ctx.ui.notify(result.markdown, "info");

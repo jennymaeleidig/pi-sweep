@@ -2,6 +2,8 @@ import type { FindingDraft, SweepReport } from "./contract.ts";
 import { selectFiles } from "./diff.ts";
 import { realCommandRunner, type CommandRunner } from "./exec.ts";
 import { buildGateTable, finalizeFindings, renderGateTable } from "./gate.ts";
+import { applyFindings, renderApplyReport, type ApplyDecision, type ApplyResult } from "./apply.ts";
+import type { TestCommand } from "./test-command.ts";
 import { detect as detectJscpd } from "./adapters/jscpd.ts";
 
 export type SweepKind = "sweep" | "code" | "test" | "prose";
@@ -24,12 +26,19 @@ export interface SweepRequest {
   base?: string;
   fullAudit?: boolean;
   reportOnly?: boolean;
+  /** Run the apply engine after the gate. Report-only unless true. */
+  apply?: boolean;
+  /** Explicit apply decision; defaults to the gate's per-finding action. */
+  decide?: ApplyDecision;
+  /** Pre-resolved suite; the engine resolves the repo's declaration otherwise. */
+  testCommand?: TestCommand | null;
   detectors?: Detector[];
 }
 
 export interface SweepResult {
   report: SweepReport;
   markdown: string;
+  apply?: ApplyResult;
 }
 
 const jscpdDetector: Detector = {
@@ -69,7 +78,16 @@ export async function runSweep(request: SweepRequest): Promise<SweepResult> {
     );
   }
 
-  const findings = finalizeFindings(drafts);
+  const applyResult = request.apply
+    ? await applyFindings({
+        cwd: request.cwd,
+        findings: finalizeFindings(drafts),
+        runner,
+        decide: request.decide,
+        testCommand: request.testCommand,
+      })
+    : undefined;
+  const findings = applyResult?.findings ?? finalizeFindings(drafts);
   const gate = buildGateTable(findings);
   const report: SweepReport = {
     mode: selection.mode,
@@ -80,5 +98,9 @@ export async function runSweep(request: SweepRequest): Promise<SweepResult> {
     gate,
   };
 
-  return { report, markdown: renderGateTable(gate) };
+  const markdown = applyResult
+    ? `${renderGateTable(gate)}\n\n${renderApplyReport(applyResult)}`
+    : renderGateTable(gate);
+
+  return applyResult ? { report, markdown, apply: applyResult } : { report, markdown };
 }

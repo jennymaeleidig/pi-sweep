@@ -7,6 +7,7 @@ interface CliOptions {
   kind: SweepKind;
   base?: string;
   fullAudit: boolean;
+  apply: boolean;
   json: boolean;
 }
 
@@ -17,7 +18,8 @@ function usage(): string {
     "Options:",
     "  --base <ref>       SHA, branch, tag, or merge-base:<ref> (default: HEAD)",
     "  --full-audit       Sweep every tracked and untracked file instead of the diff",
-    "  --report-only      Report findings without applying (the only mode so far)",
+    "  --report-only      Report findings without applying (the default)",
+    "  --apply            Run the apply engine after the gate (red hunks revert)",
     "  --json             Print the machine-readable report instead of markdown",
     "  --help             Show this help",
   ].join("\n");
@@ -27,6 +29,7 @@ function parseArgs(argv: string[]): CliOptions {
   let kind: SweepKind = "sweep";
   let base: string | undefined;
   let fullAudit = false;
+  let apply = false;
   let json = false;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -45,6 +48,10 @@ function parseArgs(argv: string[]): CliOptions {
         fullAudit = true;
         break;
       case "--report-only":
+        apply = false;
+        break;
+      case "--apply":
+        apply = true;
         break;
       case "--json":
         json = true;
@@ -66,7 +73,7 @@ function parseArgs(argv: string[]): CliOptions {
     }
   }
 
-  return { kind, base, fullAudit, json };
+  return { kind, base, fullAudit, apply, json };
 }
 
 async function main(): Promise<void> {
@@ -76,7 +83,8 @@ async function main(): Promise<void> {
     cwd: process.cwd(),
     base: options.base,
     fullAudit: options.fullAudit,
-    reportOnly: true,
+    reportOnly: !options.apply,
+    apply: options.apply,
   });
 
   if (options.json) {
