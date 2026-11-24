@@ -1,5 +1,4 @@
-import type { FindingDraft } from "../contract.ts";
-import type { CommandRunner } from "../exec.ts";
+import type { DetectorInput, FindingDraft } from "../contract.ts";
 
 export interface ModuleReportReference {
   file: string;
@@ -30,10 +29,7 @@ export interface LensClient {
   moduleReport(file: string): Promise<ModuleReport | null>;
 }
 
-export interface ZeroFanoutInput {
-  files: string[];
-  cwd: string;
-  runner: CommandRunner;
+export interface ZeroFanoutInput extends DetectorInput {
   lens?: LensClient;
 }
 

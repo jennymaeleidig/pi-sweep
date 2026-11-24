@@ -176,23 +176,34 @@ async function git(
   return runner("git", args, { cwd });
 }
 
-/** Find public names that a diff replaces with a different name. */
-export async function detectRenamedPublicNames(
+async function renameDiff(
   input: RenameInput,
-): Promise<RenamedPublicName[]> {
+  args: string[],
+): Promise<string> {
   const result = await git(input.cwd, input.runner, [
     "diff",
     "--unified=0",
     "--no-color",
     "--no-ext-diff",
-    input.base,
-    "HEAD",
+    ...args,
     "--",
   ]);
   if (result.code !== 0) {
     throw new Error(`git diff failed: ${result.stderr.trim()}`);
   }
-  return parseRenameDiff(result.stdout);
+  return result.stdout;
+}
+
+/** Find public names that a committed, staged, or unstaged diff replaces. */
+export async function detectRenamedPublicNames(
+  input: RenameInput,
+): Promise<RenamedPublicName[]> {
+  const diffs = await Promise.all([
+    renameDiff(input, [input.base, "HEAD"]),
+    renameDiff(input, ["--cached"]),
+    renameDiff(input, []),
+  ]);
+  return parseRenameDiff(diffs.join("\n"));
 }
 
 async function proseMentions(

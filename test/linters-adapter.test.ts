@@ -50,6 +50,59 @@ test("runs only declared lint tasks over the changed files", async () => {
   ]);
 });
 
+test("attaches a delete edit for a single-line unused import", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+  await write(cwd, "src/a.ts", "import { old } from './old.ts';\nconst keep = 1;\n");
+  const runner: CommandRunner = async (_command, args) => {
+    if (args[0] === "tasks") {
+      return { stdout: tasks([{ name: "lint" }]), stderr: "", code: 0 };
+    }
+    return {
+      stdout: JSON.stringify([
+        {
+          filePath: join(cwd, "src/a.ts"),
+          messages: [{ ruleId: "no-unused-vars", line: 1, message: "'old' is never used" }],
+        },
+      ]),
+      stderr: "",
+      code: 1,
+    };
+  };
+
+  const drafts = await detect({ files: ["src/a.ts"], cwd, runner });
+
+  assert.deepEqual(drafts[0]?.edit, {
+    oldText: "import { old } from './old.ts';\n",
+    newText: "",
+  });
+});
+
+test("leaves a multiline unused declaration without an edit", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+  await write(cwd, "src/a.ts", "const value = {\n  keep: 1,\n};\n");
+  const runner: CommandRunner = async (_command, args) => {
+    if (args[0] === "tasks") {
+      return { stdout: tasks([{ name: "lint" }]), stderr: "", code: 0 };
+    }
+    return {
+      stdout: JSON.stringify([
+        {
+          filePath: join(cwd, "src/a.ts"),
+          messages: [{ ruleId: "no-unused-vars", line: 1, message: "'value' is never used" }],
+        },
+      ]),
+      stderr: "",
+      code: 1,
+    };
+  };
+
+  const drafts = await detect({ files: ["src/a.ts"], cwd, runner });
+
+  assert.equal(drafts[0]?.edit, undefined);
+});
+
 test("normalizes SARIF task output", async () => {
   const cwd = join(import.meta.dirname, "fixtures", "jscpd");
   const runner: CommandRunner = async (_command, args) => {

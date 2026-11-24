@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { CommandRunner } from "./exec.ts";
+import { unique } from "./paths.ts";
 
 export interface DiffInput {
   cwd: string;
@@ -97,10 +98,6 @@ function parsePaths(output: string): string[] {
 
 function existing(cwd: string, paths: string[]): string[] {
   return paths.filter((path) => existsSync(resolve(cwd, path)));
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values)].sort();
 }
 
 async function diffNames(

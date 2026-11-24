@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { miseExecArgs } from "./tools.ts";
 
 export interface TestCommand {
   command: string;
@@ -136,8 +137,8 @@ function resolveFramework(cwd: string, manifest: Manifest | null): TestCommand |
     ])
   ) {
     return {
-      command: "npx",
-      args: ["--no-install", "vitest", "run"],
+      command: "mise",
+      args: miseExecArgs("npx", ["--no-install", "vitest", "run"]),
       source: "framework",
       detail: "vitest default",
     };
@@ -156,8 +157,8 @@ function resolveFramework(cwd: string, manifest: Manifest | null): TestCommand |
     ])
   ) {
     return {
-      command: "npx",
-      args: ["--no-install", "jest"],
+      command: "mise",
+      args: miseExecArgs("npx", ["--no-install", "jest"]),
       source: "framework",
       detail: "jest default",
     };
@@ -171,8 +172,8 @@ function resolveFramework(cwd: string, manifest: Manifest | null): TestCommand |
     tox.includes("[pytest]")
   ) {
     return {
-      command: "pytest",
-      args: [],
+      command: "mise",
+      args: miseExecArgs("pytest", []),
       source: "framework",
       detail: "pytest default",
     };
@@ -180,8 +181,8 @@ function resolveFramework(cwd: string, manifest: Manifest | null): TestCommand |
 
   if (existsSync(join(cwd, "Cargo.toml"))) {
     return {
-      command: "cargo",
-      args: ["test"],
+      command: "mise",
+      args: miseExecArgs("cargo", ["test"]),
       source: "framework",
       detail: "cargo test default",
     };

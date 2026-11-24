@@ -1,13 +1,10 @@
-import { relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import type { FindingDraft } from "../contract.ts";
-import type { CommandRunner } from "../exec.ts";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import type { DetectorInput, FindingDraft } from "../contract.ts";
+import { repoPath } from "../paths.ts";
+import { runMise } from "../tools.ts";
 
-export interface LinterInput {
-  files: string[];
-  cwd: string;
-  runner: CommandRunner;
-}
+export interface LinterInput extends DetectorInput {}
 
 interface MiseTask {
   name?: unknown;
@@ -51,21 +48,6 @@ interface SarifLog {
 const LINT_TASK_NAME = /^lint(?:[:._-]|$)/;
 const ANSI = /\u001b\[[0-9;]*m/g;
 
-function normalizePath(cwd: string, file: string): string {
-  let candidate = file.trim();
-  if (candidate.startsWith("file://")) {
-    try {
-      candidate = fileURLToPath(candidate);
-    } catch {
-      return "";
-    }
-  }
-  if (!candidate) {
-    return "";
-  }
-  return relative(cwd, resolve(cwd, candidate)).split(sep).join("/");
-}
-
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
 function parseJson(text: string): Json | undefined {
@@ -93,7 +75,7 @@ function fromEslint(value: unknown, cwd: string): NormalizedMessage[] {
     if (!file || typeof file.filePath !== "string" || !Array.isArray(file.messages)) {
       continue;
     }
-    const path = normalizePath(cwd, file.filePath);
+    const path = repoPath(cwd, file.filePath);
     for (const rawMessage of file.messages) {
       const message = asRecord(rawMessage) as EslintMessage | undefined;
       if (!message || typeof message.message !== "string") {
@@ -131,7 +113,7 @@ function fromSarif(value: unknown, cwd: string): NormalizedMessage[] {
         result && typeof result.ruleId === "string" && result.ruleId
           ? result.ruleId
           : "lint";
-      messages.push({ file: normalizePath(cwd, uri), line, rule, message: text });
+      messages.push({ file: repoPath(cwd, uri), line, rule, message: text });
     }
   }
   return messages;
@@ -162,7 +144,7 @@ function fromGenericJson(value: unknown, cwd: string): NormalizedMessage[] {
           ? record.ruleId
           : "lint";
     messages.push({
-      file: normalizePath(cwd, file),
+      file: repoPath(cwd, file),
       line: typeof line === "number" && line > 0 ? line : 1,
       rule,
       message,
@@ -178,7 +160,7 @@ function fromTypeScriptDiagnostic(line: string, cwd: string): NormalizedMessage 
   if (!diagnostic) {
     return undefined;
   }
-  const file = normalizePath(cwd, diagnostic[1] ?? "");
+  const file = repoPath(cwd, diagnostic[1] ?? "");
   const lineNumber = Number(diagnostic[2]);
   const message = diagnostic[5]?.trim();
   if (!file || !Number.isInteger(lineNumber) || lineNumber < 1 || !message) {
@@ -200,7 +182,7 @@ function fromText(text: string, cwd: string): NormalizedMessage[] {
     if (!match) {
       continue;
     }
-    const file = normalizePath(cwd, match[1] ?? "");
+    const file = repoPath(cwd, match[1] ?? "");
     const lineNumber = Number(match[2]);
     const message = match[4]?.trim();
     if (!file || !Number.isInteger(lineNumber) || lineNumber < 1 || !message) {
@@ -239,8 +221,8 @@ function parseOutput(text: string, cwd: string): NormalizedMessage[] {
 async function discoverLintTasks(input: LinterInput): Promise<string[]> {
   let result;
   try {
-    result = await input.runner(
-      "mise",
+    result = await runMise(
+      input.runner,
       ["tasks", "ls", "--json", "--no-global"],
       { cwd: input.cwd },
     );
@@ -281,6 +263,53 @@ function toDraft(message: NormalizedMessage): FindingDraft {
   };
 }
 
+function unusedRule(rule: string): boolean {
+  return /unused|F401|dead_code/i.test(rule);
+}
+
+function selfContainedLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (/^import\b.*(?:;|["'])\s*$/.test(trimmed)) {
+    return true;
+  }
+  if (!/^(?:export\s+)?(?:const|let|var)\b/.test(trimmed)) {
+    return false;
+  }
+  return trimmed.endsWith(";");
+}
+
+async function attachEdits(input: LinterInput, drafts: FindingDraft[]): Promise<FindingDraft[]> {
+  const contents = new Map<string, string[]>();
+  const attached: FindingDraft[] = [];
+  for (const draft of drafts) {
+    if (!unusedRule(draft.rule)) {
+      attached.push(draft);
+      continue;
+    }
+    let lines = contents.get(draft.file);
+    if (!lines) {
+      try {
+        lines = (await readFile(resolve(input.cwd, draft.file), "utf8")).split("\n");
+      } catch {
+        attached.push(draft);
+        continue;
+      }
+      contents.set(draft.file, lines);
+    }
+    const line = lines[draft.line - 1];
+    if (line === undefined || !selfContainedLine(line)) {
+      attached.push(draft);
+      continue;
+    }
+    const trailing = draft.line < lines.length ? "\n" : "";
+    attached.push({ ...draft, edit: { oldText: `${line}${trailing}`, newText: "" } });
+  }
+  return attached;
+}
+
 function dedupe(drafts: FindingDraft[]): FindingDraft[] {
   const seen = new Set<string>();
   const unique: FindingDraft[] = [];
@@ -303,7 +332,7 @@ export async function detect(input: LinterInput): Promise<FindingDraft[]> {
   if (input.files.length === 0) {
     return [];
   }
-  const selected = new Set(input.files.map((file) => normalizePath(input.cwd, file)));
+  const selected = new Set(input.files.map((file) => repoPath(input.cwd, file)));
   const tasks = await discoverLintTasks(input);
   if (tasks.length === 0) {
     return [];
@@ -311,8 +340,8 @@ export async function detect(input: LinterInput): Promise<FindingDraft[]> {
 
   const drafts: FindingDraft[] = [];
   for (const task of tasks) {
-    const result = await input.runner(
-      "mise",
+    const result = await runMise(
+      input.runner,
       ["run", task, "--", ...input.files],
       { cwd: input.cwd },
     );
@@ -324,5 +353,5 @@ export async function detect(input: LinterInput): Promise<FindingDraft[]> {
       }
     }
   }
-  return dedupe(drafts);
+  return attachEdits(input, dedupe(drafts));
 }

@@ -178,19 +178,26 @@ export async function applyFindings(input: ApplyInput): Promise<ApplyResult> {
   let reverted = 0;
   let skipped = 0;
 
+  const record = (
+    batch: ApplyBatch,
+    finding: Finding,
+    status: ApplyStatus,
+  ): void => {
+    if (status === "skipped") {
+      skipped += 1;
+    }
+    const outcome: ApplyOutcome = { finding, status };
+    batch.outcomes.push(outcome);
+    outcomes.set(finding.id, outcome);
+  };
+
   for (const group of groupByFile(effective)) {
     let content: string | null = null;
     const batch: ApplyBatch = { file: group.file, outcomes: [] };
 
     for (const finding of group.findings) {
       if (finding.action !== "apply" || testCommand === null || !finding.edit) {
-        const status: ApplyStatus = finding.action === "ask" ? "ask" : "skipped";
-        if (status === "skipped") {
-          skipped += 1;
-        }
-        const outcome = { finding, status };
-        batch.outcomes.push(outcome);
-        outcomes.set(finding.id, outcome);
+        record(batch, finding, finding.action === "ask" ? "ask" : "skipped");
         continue;
       }
 
@@ -198,15 +205,15 @@ export async function applyFindings(input: ApplyInput): Promise<ApplyResult> {
         try {
           content = await readFile(resolve(input.cwd, group.file), "utf8");
         } catch {
-          const skippedFinding: Finding = {
-            ...finding,
-            action: "skip",
-            reason: `file ${group.file} could not be read`,
-          };
-          skipped += 1;
-          const outcome: ApplyOutcome = { finding: skippedFinding, status: "skipped" };
-          batch.outcomes.push(outcome);
-          outcomes.set(finding.id, outcome);
+          record(
+            batch,
+            {
+              ...finding,
+              action: "skip",
+              reason: `file ${group.file} could not be read`,
+            },
+            "skipped",
+          );
           continue;
         }
       }
@@ -230,13 +237,8 @@ export async function applyFindings(input: ApplyInput): Promise<ApplyResult> {
         applied += 1;
       } else if (result.status === "reverted") {
         reverted += 1;
-        skipped += 1;
-      } else {
-        skipped += 1;
       }
-      const outcome: ApplyOutcome = { finding: outcomeFinding, status: result.status };
-      batch.outcomes.push(outcome);
-      outcomes.set(finding.id, outcome);
+      record(batch, outcomeFinding, result.status);
     }
 
     batches.push(batch);

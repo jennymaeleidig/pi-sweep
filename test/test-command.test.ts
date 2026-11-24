@@ -49,8 +49,15 @@ test("falls back to the framework default when no test script is declared", asyn
   const resolved = await resolveTestCommand(cwd);
 
   assert.equal(resolved?.source, "framework");
-  assert.equal(resolved?.command, "npx");
-  assert.deepEqual(resolved?.args, ["--no-install", "vitest", "run"]);
+  assert.equal(resolved?.command, "mise");
+  assert.deepEqual(resolved?.args, [
+    "exec",
+    "--",
+    "npx",
+    "--no-install",
+    "vitest",
+    "run",
+  ]);
 });
 
 test("resolves no test command when the repo declares none", async (t) => {

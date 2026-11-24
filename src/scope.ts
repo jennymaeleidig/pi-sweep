@@ -42,6 +42,21 @@ const GENERATED_NAMES = new Set([
   "yarn.lock",
 ]);
 
+const CONFIG_EXTENSIONS = new Set([
+  ".cfg",
+  ".conf",
+  ".config",
+  ".ini",
+  ".json",
+  ".json5",
+  ".jsonc",
+  ".lock",
+  ".properties",
+  ".toml",
+  ".yaml",
+  ".yml",
+]);
+
 const EXTERNAL_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
 const EXTERNAL_HANDLE = /^(?:mailto|tel|data|urn):/i;
 
@@ -88,6 +103,16 @@ export function isProsePath(path: string): boolean {
 
 export function isProseFile(path: string): boolean {
   return neverEditReason(path) === null && isProsePath(path);
+}
+
+/** Configuration and lockfile paths that a code edit must never rewrite. */
+export function isConfigPath(path: string): boolean {
+  const name = (segments(path).at(-1) ?? "").toLowerCase();
+  if (name === ".env" || name.startsWith(".env.")) {
+    return true;
+  }
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && CONFIG_EXTENSIONS.has(name.slice(dot));
 }
 
 /** Paths a prose detector may read and a prose apply may rewrite. */

@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { FindingDraft } from "../contract.ts";
-import type { CommandRunner } from "../exec.ts";
+import { join } from "node:path";
+import type { DetectorInput, FindingDraft } from "../contract.ts";
+import { repoPath } from "../paths.ts";
 import { selectTestFiles } from "../test-paths.ts";
+import { runTool } from "../tools.ts";
 
 /** Versions pinned in mise.toml; a test keeps the two declarations honest. */
 export const TOOL_VERSIONS = {
@@ -13,10 +14,7 @@ export const TOOL_VERSIONS = {
   typescriptEslintParser: "8.74.0",
 } as const;
 
-export interface EslintJestInput {
-  files: string[];
-  cwd: string;
-  runner: CommandRunner;
+export interface EslintJestInput extends DetectorInput {
   /** Override the generated flat config, mainly for tests. */
   configPath?: string;
 }
@@ -125,7 +123,7 @@ export async function probe(input: EslintJestInput): Promise<EslintJestAvailabil
     return setup;
   }
   try {
-    const result = await input.runner("eslint", ["--version"], { cwd: input.cwd });
+    const result = await runTool(input.runner, "eslint", ["--version"], { cwd: input.cwd });
     if (result.code !== 0) {
       return {
         available: false,
@@ -162,11 +160,6 @@ export function buildEslintConfigSource(): string {
   ].join("\n");
 }
 
-function repoPath(cwd: string, filePath: string): string {
-  const absolute = isAbsolute(filePath) ? filePath : resolve(cwd, filePath);
-  return relative(cwd, absolute).split(sep).join("/");
-}
-
 function draftFor(message: EslintMessage, file: string): FindingDraft {
   return {
     file,
@@ -199,7 +192,8 @@ export async function detect(input: EslintJestInput): Promise<FindingDraft[]> {
       configPath = temporaryConfig;
     }
 
-    const result = await input.runner(
+    const result = await runTool(
+      input.runner,
       "eslint",
       [
         "--no-config-lookup",

@@ -15,11 +15,11 @@ import { cleanup, commit, duplicateSource, git, tempRepo, write } from "./helper
 test("test kind wires assertion hygiene and test-scoped duplication", () => {
   assert.deepEqual(
     detectorsFor("test").map((detector) => detector.name),
-    ["eslint-jest", "jscpd-tests"],
+    ["eslint-jest", "jscpd-tests", "no-assertion"],
   );
   assert.deepEqual(
     testDetectors().map((detector) => detector.name),
-    ["eslint-jest", "jscpd-tests"],
+    ["eslint-jest", "jscpd-tests", "no-assertion"],
   );
   assert.equal(typeof testDetectors()[0]?.probe, "function");
 });
@@ -92,7 +92,6 @@ test("reports eslint-jest unavailable instead of clean when the repo has no ESLi
     cwd,
     runner: realCommandRunner,
     base,
-    reportOnly: true,
   });
 
   const eslint = result.report.detectors?.find((detector) => detector.name === "eslint-jest");

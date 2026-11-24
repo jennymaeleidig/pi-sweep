@@ -1,4 +1,5 @@
 import type {
+  DetectorInput,
   DetectorStatus,
   FindingDraft,
   SweepCharter,
@@ -10,7 +11,6 @@ import { realCommandRunner, type CommandRunner } from "./exec.ts";
 import { buildGateTable, decideForPolicy, finalizeFindings, isCiEnvironment, renderGateTable, type GatePolicy } from "./gate.ts";
 import { applyFindings, renderApplyReport, type ApplyDecision, type ApplyResult } from "./apply.ts";
 import type { TestCommand } from "./test-command.ts";
-import { detect as detectJscpd } from "./adapters/jscpd.ts";
 import type { LensClient } from "./adapters/zero-fanout.ts";
 import { codeDetectors } from "./sweeps/code.ts";
 import { testDetectors } from "./sweeps/test.ts";
@@ -19,11 +19,7 @@ import { loadMutationEvidence, type MutationEvidence } from "./mutation.ts";
 
 export type SweepKind = "sweep" | SweepCharter;
 
-export interface DetectorInput {
-  files: string[];
-  cwd: string;
-  runner: CommandRunner;
-}
+export type { DetectorInput } from "./contract.ts";
 
 export interface DetectorAvailability {
   available: boolean;
@@ -45,7 +41,6 @@ export interface SweepRequest {
   runner?: CommandRunner;
   base?: string;
   fullAudit?: boolean;
-  reportOnly?: boolean;
   /** Run the apply engine after the gate. Report-only unless true. */
   apply?: boolean;
   /** Explicit apply decision; defaults to the gate's per-finding action. */
@@ -80,36 +75,17 @@ export interface SweepResult {
   mutation?: MutationEvidence;
 }
 
-const jscpdDetector: Detector = {
-  name: "jscpd",
-  detect: (input) => detectJscpd(input),
-};
-
-function dedupeDetectors(detectors: Detector[]): Detector[] {
-  const seen = new Set<string>();
-  const unique: Detector[] = [];
-  for (const detector of detectors) {
-    if (seen.has(detector.name)) {
-      continue;
-    }
-    seen.add(detector.name);
-    unique.push(detector);
-  }
-  return unique;
-}
-
 export function detectorsFor(
   kind: SweepKind,
   options: { lens?: LensClient } = {},
 ): Detector[] {
   switch (kind) {
     case "sweep":
-      return dedupeDetectors([
-        jscpdDetector,
+      return [
         ...codeDetectors(options),
         ...testDetectors(),
         ...proseDetectors(),
-      ]);
+      ];
     case "code":
       return codeDetectors(options);
     case "test":

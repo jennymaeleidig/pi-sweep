@@ -30,8 +30,9 @@ node ../../src/cli.ts test --base <ref>
 The command is relative to `skills/test-sweep/`. Add `--full-audit` only when the
 user asks for a whole-repository sweep. The CLI selects the three-part diff union
 (committed since the basepoint, uncommitted, untracked), runs the test-sweep
-detectors, and prints the gate table. Findings from tools are Tier 1 or Tier 2;
-never hand-edit their tier.
+detectors, and prints the gate table. Findings from tools keep the gate's tier:
+Tier 0 only when allowlisted or measured, otherwise Tier 1. Never hand-edit their
+tier.
 
 The detectors are:
 
@@ -41,10 +42,30 @@ The detectors are:
   `no-disabled-tests`, `valid-expect`, `no-container`, `no-node-access`, `no-debug`.
 - `jscpd-tests` — duplication scoped to test directories and test-named files,
   with thresholds tuned for small repeated permutations.
+- `no-assertion` — test blocks in JavaScript/TypeScript (`it`, `test`) and Python
+  (`def test_`) that contain no assertion call. The managed runtime hook covers the
+  same gap; when it is not installed the sweep reports the hook as absent rather
+  than calling the suite clean.
 
 Read the `Detectors:` section of the output. A detector reported **unavailable**
 (no ESLint setup, no JavaScript/TypeScript test files, or a missing executable) has
 not run; say so in the report and never describe that check as clean.
+
+## 2a. Install the managed no-assertion hook
+
+The detector is static; the hook is what fails a zero-assertion test in the real
+suite. Install both pieces so a test that passes today cannot slip through later.
+
+- New repositories: let chezmoi apply the hook from the dotfiles source, so the
+  managed copy stays current.
+- Existing repositories: copy `hooks/vitest-no-assertion/` into the repo and
+  register `setup.ts` in `vitest.config.ts` (`test.setupFiles`), or copy
+  `hooks/pytest-no-assertion/conftest.py` and `no_assertion.py` into the pytest
+  conftest root. No plugin configuration is needed for Python.
+
+Both files carry a `MANAGED BY pi-sweep` marker. Never delete, rename, or strip
+that marker during cleanup, codemods, or a sweep; remove the hook only when
+deliberately retiring it.
 
 ## 2b. Mutation testing is opt-in, never per-session
 

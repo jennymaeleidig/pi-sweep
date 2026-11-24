@@ -1,13 +1,10 @@
-import { relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { FindingDraft } from "../contract.ts";
-import type { CommandRunner } from "../exec.ts";
+import type { DetectorInput, FindingDraft } from "../contract.ts";
+import { repoPath } from "../paths.ts";
 import { selectProseFiles } from "../scope.ts";
+import { runTool } from "../tools.ts";
 
-export interface ValeInput {
-  files: string[];
-  cwd: string;
-  runner: CommandRunner;
+export interface ValeInput extends DetectorInput {
   /** Defaults to the SlopWords config bundled with pi-sweep. */
   configPath?: string;
 }
@@ -25,10 +22,6 @@ interface ValeAlert {
 type ValeReport = Record<string, ValeAlert[]>;
 
 const bundledConfig = fileURLToPath(new URL("../../vale/.vale.ini", import.meta.url));
-
-function repoPath(cwd: string, path: string): string {
-  return relative(cwd, resolve(cwd, path)).split(sep).join("/");
-}
 
 function draftFor(cwd: string, file: string, alert: ValeAlert): FindingDraft {
   const suggestion = alert.Suggestions?.[0];
@@ -55,7 +48,8 @@ export async function detect(input: ValeInput): Promise<FindingDraft[]> {
     return [];
   }
 
-  const result = await input.runner(
+  const result = await runTool(
+    input.runner,
     "vale",
     [
       "--config",

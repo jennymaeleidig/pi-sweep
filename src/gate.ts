@@ -6,6 +6,8 @@ import type {
   GateTable,
   Tier,
 } from "./contract.ts";
+import { TEST_DUPLICATION_MIN_TOKENS } from "./adapters/jscpd-tests.ts";
+import { escapeTableCell, renderTable, renderTotals } from "./markdown.ts";
 
 /** jscpd's own default minimum block size, and the Tier 0 duplicate threshold. */
 export const DEFAULT_JSCPD_MIN_TOKENS = 50;
@@ -28,7 +30,23 @@ const TIER_ZERO_RULES = new Set<string>([
 ]);
 
 /** Only the repo-lint detector may reach Tier 0; agent-authored findings may not. */
-const TIER_ZERO_DETECTOR = "linter";
+const LINTER_DETECTORS = new Set<string>(["linter", "linters"]);
+
+/**
+ * Detectors that prove their finding mechanically. Anything outside this set
+ * is an agent or axis judgment, which always waits at Tier 2.
+ */
+const MACHINE_DETECTORS = new Set<string>([
+  "jscpd",
+  "jscpd-tests",
+  "linter",
+  "linters",
+  "lychee",
+  "vale",
+  "eslint-jest",
+  "mutation",
+  "zero-fanout",
+]);
 
 /**
  * Zero-fanout deletion candidates and mutation survivors never auto-apply,
@@ -81,6 +99,15 @@ function isAllowlistedRule(rule: string): boolean {
   return TIER_ZERO_RULES.has(rule.slice(separator + 1));
 }
 
+function duplicateMinTokens(detector: string, policy: GatePolicy): number {
+  if (policy.jscpdMinTokens !== undefined) {
+    return policy.jscpdMinTokens;
+  }
+  return detector === "jscpd-tests"
+    ? TEST_DUPLICATION_MIN_TOKENS
+    : DEFAULT_JSCPD_MIN_TOKENS;
+}
+
 export function tierForDraft(draft: FindingDraft, policy: GatePolicy = {}): Tier {
   if (
     PERMANENT_TIER_ONE_DETECTORS.has(draft.detector) ||
@@ -88,18 +115,20 @@ export function tierForDraft(draft: FindingDraft, policy: GatePolicy = {}): Tier
   ) {
     return 1;
   }
-  if (draft.detector === TIER_ZERO_DETECTOR && isAllowlistedRule(draft.rule)) {
+  if (!MACHINE_DETECTORS.has(draft.detector)) {
+    return 2;
+  }
+  if (LINTER_DETECTORS.has(draft.detector) && isAllowlistedRule(draft.rule)) {
     return 0;
   }
-  if (draft.detector === "jscpd" || draft.rule === "duplicate-code") {
-    const minTokens = policy.jscpdMinTokens ?? DEFAULT_JSCPD_MIN_TOKENS;
+  if (draft.detector === "jscpd" || draft.detector === "jscpd-tests") {
+    const minTokens = duplicateMinTokens(draft.detector, policy);
     const tokens = draft.metrics?.tokens;
     if (typeof tokens === "number" && tokens >= minTokens) {
       return 0;
     }
-    return 1;
   }
-  return 2;
+  return 1;
 }
 
 export function actionForTier(tier: Tier, autoApplyTierZero = true): GateAction {
@@ -180,33 +209,26 @@ export function buildGateTable(findings: Finding[]): GateTable {
   return { files: groupByFile(findings), totals };
 }
 
-function cell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
-}
-
 export function renderGateTable(table: GateTable): string {
   const lines: string[] = [];
   if (table.files.length === 0) {
     lines.push("No findings.");
   }
   for (const group of table.files) {
+    const rows = group.findings.map((finding) => [
+      String(finding.line),
+      String(finding.tier),
+      escapeTableCell(finding.rule),
+      escapeTableCell(finding.evidence),
+      escapeTableCell(finding.proposedFix ?? "—"),
+    ]);
     lines.push(
       `### ${group.file}`,
       "",
-      "| Line | Tier | Rule | Evidence | Proposed fix |",
-      "| ---: | ---: | --- | --- | --- |",
+      renderTable(["Line", "Tier", "Rule", "Evidence", "Proposed fix"], rows),
+      "",
     );
-    for (const finding of group.findings) {
-      lines.push(
-        `| ${finding.line} | ${finding.tier} | ${cell(finding.rule)} | ${cell(
-          finding.evidence,
-        )} | ${cell(finding.proposedFix ?? "—")} |`,
-      );
-    }
-    lines.push("");
   }
-  lines.push(
-    `**Totals:** Tier 0: ${table.totals[0]}, Tier 1: ${table.totals[1]}, Tier 2: ${table.totals[2]}`,
-  );
+  lines.push(renderTotals(table.totals));
   return lines.join("\n");
 }

@@ -47,7 +47,7 @@ test("renders prose findings and skips excluded files", async (t) => {
   assert.ok(result.report.findings.some((finding) => finding.rule === "broken-path"));
   assert.ok(result.report.findings.some((finding) => finding.rule === "broken-anchor"));
   assert.ok(result.report.findings.some((finding) => finding.detector === "vale"));
-  assert.ok(result.report.findings.every((finding) => finding.tier === 2));
+  assert.ok(result.report.findings.every((finding) => finding.tier === 1));
 
   assert.match(result.markdown, /### guide\.md/);
   assert.match(result.markdown, /broken-path/);

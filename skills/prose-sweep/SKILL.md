@@ -209,8 +209,9 @@ same file headings, and render one table:
 | Line | Tier | Rule | Evidence | Proposed fix |
 ```
 
-Deterministic detector findings are Tier 2 in this report-only phase, alongside
-agent findings. Keep skipped findings with a one-line reason. Keep anything you
+Deterministic detector findings keep their machine-evidenced tier (Tier 1 for
+these pre-flight tools; an allowlisted or measured finding may be Tier 0).
+Agent findings stay Tier 2. Keep skipped findings with a one-line reason. Keep anything you
 could not evidence as "ask". Print the table and stop. Do not edit files.
 
 ## Apply rules for later phases

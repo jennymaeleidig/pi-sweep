@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { generate } from "../scripts/generate-slopwords.ts";
+import { defaultSlopSource, generate } from "../scripts/generate-slopwords.ts";
 
 const fixtureSource = join(import.meta.dirname, "fixtures", "slopwords", "source.md");
 const checkedIn = join(import.meta.dirname, "..", "vale", "styles", "SlopWords");
@@ -46,4 +46,19 @@ test("generates banned words, empty phrases, and mechanically detectable pattern
     "Robotic rhythm",
     "Synonym cycling",
   ]);
+});
+
+test("resolves the default source from the environment instead of a home path", () => {
+  assert.equal(
+    defaultSlopSource({ PI_SWEEP_SLOP_SOURCE: "/tmp/skill.md" }),
+    "/tmp/skill.md",
+  );
+  assert.match(defaultSlopSource({}), /SKILL\.md$/);
+});
+
+test("fails with an actionable message when the source is missing", async () => {
+  await assert.rejects(
+    generate(join(import.meta.dirname, "fixtures", "slopwords", "missing.md")),
+    /Set PI_SWEEP_SLOP_SOURCE or pass --source/,
+  );
 });

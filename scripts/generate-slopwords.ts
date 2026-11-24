@@ -2,21 +2,32 @@
 /**
  * Regenerate the Vale SlopWords pack from the no-ai-slop word and pattern lists.
  *
- * Source of truth: the "Words to cut" and "Patterns to cut" sections of
- * /Users/jennymaeleidig/.agents/skills/no-ai-slop/SKILL.md. Pass --source to
- * read a copy instead, which is how tests stay independent of that skill.
+ * Source of truth: the "Words to cut" and "Patterns to cut" sections of the
+ * no-ai-slop skill's SKILL.md. The default is read from PI_SWEEP_SLOP_SOURCE,
+ * then the skill under the current home directory. Pass --source to read a copy
+ * instead, which is how tests stay independent of that skill.
  *
  *   node scripts/generate-slopwords.ts [--source <md>] [--out <dir>]
  *
  * The output is deterministic: same input, same bytes, in sorted category order.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const defaultSource = "/Users/jennymaeleidig/.agents/skills/no-ai-slop/SKILL.md";
 const defaultOut = join(repoRoot, "vale", "styles", "SlopWords");
+
+/** Resolve the skill source without baking a home path into the repository. */
+export function defaultSlopSource(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  return (
+    env.PI_SWEEP_SLOP_SOURCE ??
+    join(homedir(), ".agents", "skills", "no-ai-slop", "SKILL.md")
+  );
+}
 
 /** Mechanical tokens for each "Patterns to cut" category. */
 const PATTERN_TOKENS: Record<string, string[]> = {
@@ -105,7 +116,7 @@ export interface GeneratedPack {
 }
 
 function parseArgs(argv: string[]): Options | null {
-  let source = defaultSource;
+  let source = defaultSlopSource();
   let out = defaultOut;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -223,7 +234,17 @@ function rule({ message, level, words, regexes }: RuleInput): string {
 }
 
 export async function generate(sourcePath: string): Promise<GeneratedPack> {
-  const markdown = await readFile(sourcePath, "utf8");
+  let markdown: string;
+  try {
+    markdown = await readFile(sourcePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(
+        `SlopWords source not found at ${sourcePath}. Set PI_SWEEP_SLOP_SOURCE or pass --source.`,
+      );
+    }
+    throw error;
+  }
   const words = parseWordLists(markdown);
   const patterns = parsePatterns(markdown);
 

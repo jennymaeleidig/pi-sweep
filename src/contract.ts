@@ -35,6 +35,15 @@ export interface Finding {
   reason?: string;
 }
 
+import type { CommandRunner } from "./exec.ts";
+
+/** Input every detector receives from the pipeline. */
+export interface DetectorInput {
+  files: string[];
+  cwd: string;
+  runner: CommandRunner;
+}
+
 /** A detector's normalized output, before identity and tier policy are applied. */
 export type FindingDraft = Omit<Finding, "id" | "tier" | "action">;
 

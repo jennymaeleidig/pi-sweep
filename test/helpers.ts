@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -11,6 +11,18 @@ export async function tempRepo(): Promise<string> {
   await git(cwd, ["init", "-q", "-b", "main"]);
   await git(cwd, ["config", "user.email", "test@example.com"]);
   await git(cwd, ["config", "user.name", "Test"]);
+  // Keep the pinned tool file out of the git-selected fixture files.
+  await writeFile(
+    join(cwd, "mise.toml"),
+    [
+      "[tools]",
+      '"npm:jscpd" = "5.4.3"',
+      '"aqua:lycheeverse/lychee" = "0.24.2"',
+      '"aqua:vale-cli/vale" = "3.28.1"',
+      "",
+    ].join("\n"),
+  );
+  await appendFile(join(cwd, ".git", "info", "exclude"), "\nmise.toml\n");
   return cwd;
 }
 

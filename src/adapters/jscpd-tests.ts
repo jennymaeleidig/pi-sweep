@@ -1,15 +1,11 @@
-import type { FindingDraft } from "../contract.ts";
-import type { CommandRunner } from "../exec.ts";
+import type { DetectorInput, FindingDraft } from "../contract.ts";
 import { selectTestFiles } from "../test-paths.ts";
 import { detect as detectJscpd } from "./jscpd.ts";
 
 export const TEST_DUPLICATION_MIN_TOKENS = 70;
 export const TEST_DUPLICATION_MIN_LINES = 5;
 
-export interface JscpdTestsInput {
-  files: string[];
-  cwd: string;
-  runner: CommandRunner;
+export interface JscpdTestsInput extends DetectorInput {
   minTokens?: number;
   minLines?: number;
 }

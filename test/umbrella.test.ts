@@ -397,6 +397,29 @@ test("expands prose that names the old and new public name without adding delete
   assert.match(result.markdown, /Rename expansion/);
 });
 
+test("finds a public rename that is still unstaged in the worktree", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+
+  await write(cwd, "src/flag.ts", "export function oldFlag() {\n  return true;\n}\n");
+  await write(cwd, "docs/guide.md", "# Guide\n\nCall oldFlag to enable it.\n");
+  await commit(cwd, "base");
+  const base = (await git(cwd, ["rev-parse", "HEAD"])).trim();
+
+  await write(cwd, "src/flag.ts", "export function newFlag() {\n  return false;\n}\n");
+
+  const expansion = await renameAwareProseFiles({
+    cwd,
+    runner: realCommandRunner,
+    base,
+  });
+
+  assert.deepEqual(expansion.renames, [
+    { file: "src/flag.ts", oldName: "oldFlag", newName: "newFlag" },
+  ]);
+  assert.deepEqual(expansion.files, ["docs/guide.md"]);
+});
+
 test("resolves SHA, branch, tag, merge-base, and full-audit basepoints through the umbrella", async (t) => {
   await t.test("SHA", async (t) => {
     const cwd = await tempRepo();

@@ -4,6 +4,10 @@ import {
   detect as detectEslintJest,
   probe as probeEslintJest,
 } from "../adapters/eslint-jest.ts";
+import {
+  detect as detectNoAssertion,
+  hookStatus,
+} from "../adapters/no-assertion.ts";
 
 const eslintJestDetector: Detector = {
   name: "eslint-jest",
@@ -16,9 +20,18 @@ const jscpdTestsDetector: Detector = {
   detect: (input) => detectJscpdTests(input),
 };
 
+const noAssertionDetector: Detector = {
+  name: "no-assertion",
+  detect: (input) => detectNoAssertion(input),
+  async unavailable(input) {
+    const status = hookStatus(input.cwd);
+    return status.available ? [] : [status.reason ?? "managed no-assertion hook is absent"];
+  },
+};
+
 /** Assertion hygiene first, then duplication scoped to the test directories. */
 export function testDetectors(): Detector[] {
-  return [eslintJestDetector, jscpdTestsDetector];
+  return [eslintJestDetector, jscpdTestsDetector, noAssertionDetector];
 }
 
 export interface ExemptionInput {

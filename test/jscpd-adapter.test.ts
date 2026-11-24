@@ -62,6 +62,26 @@ test("normalizes each duplicate into drafts for both files", async () => {
   assert.match(drafts[1]?.evidence ?? "", /duplicated with src\/a\.ts:5-9/);
 });
 
+test("attaches a delete edit only to the later duplicate fragment", async () => {
+  const cwd = join(import.meta.dirname, "fixtures", "jscpd");
+  const runner = fakeRunner([
+    {
+      firstFile: { name: join(cwd, "a.ts"), start: 1, end: 7 },
+      secondFile: { name: join(cwd, "b.ts"), start: 1, end: 7 },
+      lines: 7,
+      tokens: 60,
+    },
+  ]);
+
+  const drafts = await detect({ files: ["a.ts", "b.ts"], cwd, runner });
+
+  const earlier = drafts.find((draft) => draft.file === "a.ts");
+  const later = drafts.find((draft) => draft.file === "b.ts");
+  assert.equal(earlier?.edit, undefined);
+  assert.equal(later?.edit?.newText, "");
+  assert.match(later?.edit?.oldText ?? "", /^export function total/);
+});
+
 test("returns no drafts when no files are selected", async () => {
   const runner: CommandRunner = async () => {
     throw new Error("jscpd must not run for an empty selection");

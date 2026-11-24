@@ -1,8 +1,10 @@
-import { runSweep, type SweepKind } from "./pipeline.ts";
+import { runSweep } from "./pipeline.ts";
 import { isCiEnvironment } from "./gate.ts";
 import { runUmbrella } from "./umbrella.ts";
+import { parseSweepArgs as parseSharedArgs } from "./args.ts";
 import type { CommandOptions, CommandRunner } from "./exec.ts";
 import type { LensClient, ModuleReport } from "./adapters/zero-fanout.ts";
+import type { SweepKind } from "./pipeline.ts";
 
 interface PiExecResult {
   stdout: string;
@@ -43,39 +45,15 @@ export interface SweepCommandOptions {
   apply?: boolean;
 }
 
-const KINDS = new Set<SweepKind>(["sweep", "code", "test", "prose"]);
-
 export function parseSweepArgs(args: string): SweepCommandOptions {
   const tokens = args.trim().split(/\s+/).filter(Boolean);
-  let kind: SweepKind = "sweep";
-  let base: string | undefined;
-  let fullAudit = false;
-  let apply = false;
-
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (token === undefined) {
-      continue;
-    }
-    if (token === "--base") {
-      base = tokens[index + 1];
-      if (!base) {
-        throw new Error("--base needs a ref");
-      }
-      index += 1;
-    } else if (token === "--full-audit") {
-      fullAudit = true;
-    } else if (token === "--apply") {
-      apply = true;
-    } else if (KINDS.has(token as SweepKind)) {
-      kind = token as SweepKind;
-    } else {
-      throw new Error(`unknown sweep argument: ${token}`);
-    }
-  }
-
-  const options: SweepCommandOptions = { kind, base, fullAudit };
-  if (apply) {
+  const parsed = parseSharedArgs(tokens);
+  const options: SweepCommandOptions = {
+    kind: parsed.kind,
+    base: parsed.base,
+    fullAudit: parsed.fullAudit,
+  };
+  if (parsed.apply) {
     options.apply = true;
   }
   return options;
@@ -113,7 +91,6 @@ export default function sweepExtension(pi: SweepHost): void {
       cwd: ctx.cwd,
       base: options.base,
       fullAudit: options.fullAudit,
-      reportOnly: options.apply !== true,
       apply: options.apply,
       interactive: isInteractiveSession(ctx),
       runner: createPiRunner(pi),

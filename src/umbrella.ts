@@ -19,6 +19,8 @@ import {
 } from "./pipeline.ts";
 import { renameAwareProseFiles, type RenameExpansion } from "./rename.ts";
 import { mutationCleanFiles } from "./mutation.ts";
+import { unique } from "./paths.ts";
+import { escapeTableCell, renderTable, renderTotals } from "./markdown.ts";
 import { buildBehaviorAxis, jscpdCleanFiles, type BehaviorAxis } from "./sweeps/test.ts";
 
 export type UmbrellaDetectors = Partial<Record<SweepCharter, Detector[]>>;
@@ -57,10 +59,6 @@ export interface UmbrellaResult {
   behaviorAxis: BehaviorAxis;
 }
 
-function unique(values: string[]): string[] {
-  return [...new Set(values)].sort();
-}
-
 function findingKey(finding: Finding): string {
   return [finding.file, finding.line, finding.rule, finding.evidence].join(
     "\0",
@@ -80,10 +78,6 @@ export function dedupeUmbrellaFindings(findings: Finding[]): Finding[] {
   });
 }
 
-function cell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
-}
-
 /** One table for every charter, with a Sweep column the single-sweep table lacks. */
 export function renderUmbrellaTable(table: GateTable): string {
   const lines: string[] = [];
@@ -91,24 +85,25 @@ export function renderUmbrellaTable(table: GateTable): string {
     lines.push("No findings.");
   }
   for (const group of table.files) {
+    const rows = group.findings.map((finding) => [
+      String(finding.line),
+      finding.sweep ?? "—",
+      String(finding.tier),
+      escapeTableCell(finding.rule),
+      escapeTableCell(finding.evidence),
+      escapeTableCell(finding.proposedFix ?? "—"),
+    ]);
     lines.push(
       `### ${group.file}`,
       "",
-      "| Line | Sweep | Tier | Rule | Evidence | Proposed fix |",
-      "| ---: | --- | ---: | --- | --- | --- |",
+      renderTable(
+        ["Line", "Sweep", "Tier", "Rule", "Evidence", "Proposed fix"],
+        rows,
+      ),
+      "",
     );
-    for (const finding of group.findings) {
-      lines.push(
-        `| ${finding.line} | ${finding.sweep ?? "—"} | ${finding.tier} | ${cell(
-          finding.rule,
-        )} | ${cell(finding.evidence)} | ${cell(finding.proposedFix ?? "—")} |`,
-      );
-    }
-    lines.push("");
   }
-  lines.push(
-    `**Totals:** Tier 0: ${table.totals[0]}, Tier 1: ${table.totals[1]}, Tier 2: ${table.totals[2]}`,
-  );
+  lines.push(renderTotals(table.totals));
   return lines.join("\n");
 }
 

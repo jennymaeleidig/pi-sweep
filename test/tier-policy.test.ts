@@ -13,7 +13,7 @@ import {
   tierZeroMayApply,
 } from "../src/gate.ts";
 import { isInteractiveSession } from "../src/extension.ts";
-import { runSweep, type Detector } from "../src/pipeline.ts";
+import { detectorsFor, runSweep, type Detector } from "../src/pipeline.ts";
 import { realCommandRunner, type CommandRunner } from "../src/exec.ts";
 import type { TestCommand } from "../src/test-command.ts";
 import { cleanup, commit, git, tempRepo, write } from "./helpers.ts";
@@ -116,12 +116,26 @@ test("routes allowlisted linter unused-symbol rules to Tier 0 across plugin pref
   }
 });
 
-test("keeps unlisted and agent-authored rules out of Tier 0", () => {
-  assert.equal(tierForDraft(linterDraft({ rule: "no-console" }), interactive), 2);
+test("keeps unlisted linter rules at Tier 1 and agent rules at Tier 2", () => {
+  assert.equal(tierForDraft(linterDraft({ rule: "no-console" }), interactive), 1);
   assert.equal(
     tierForDraft(linterDraft({ detector: "agent:code", rule: "no-unused-vars" }), interactive),
     2,
   );
+});
+
+test("routes every machine-evidenced detector to Tier 1 unless it earns Tier 0", () => {
+  for (const detector of ["lychee", "vale", "eslint-jest", "mutation", "zero-fanout"]) {
+    assert.equal(
+      tierForDraft(
+        linterDraft({ detector, rule: `${detector}-rule`, edit: undefined }),
+        interactive,
+      ),
+      1,
+      `${detector} is machine-evidenced`,
+    );
+  }
+  assert.equal(tierForDraft(linterDraft({ detector: "axis", rule: "weak-test" }), interactive), 2);
 });
 
 test("keeps zero-fanout findings gated even when their rule looks allowlisted", () => {
@@ -288,6 +302,17 @@ test("CI keeps Tier 0 gated even when a session claims to be interactive", async
   assert.equal(result.apply?.applied, 0);
 });
 
+test("keeps a 50-69 token test duplicate at Tier 1 but applies a 70-token one", () => {
+  const testDuplicate = (tokens: number): FindingDraft => ({
+    ...duplicateDraft(tokens),
+    detector: "jscpd-tests",
+  });
+
+  assert.equal(tierForDraft(testDuplicate(50), interactive), 1);
+  assert.equal(tierForDraft(testDuplicate(69), interactive), 1);
+  assert.equal(tierForDraft(testDuplicate(70), interactive), 0);
+});
+
 test("a jscpd duplicate below the token threshold waits as Tier 1", async (t) => {
   const cwd = await repoWithChangedFile();
   t.after(() => cleanup(cwd));
@@ -308,4 +333,76 @@ test("a jscpd duplicate below the token threshold waits as Tier 1", async (t) =>
   assert.equal(finding?.tier, 1);
   assert.equal(finding?.action, "ask");
   assert.equal(await readFile(join(cwd, "code.ts"), "utf8"), "alpha\n");
+});
+
+const longDuplicate = `export function compute(values: number[]): number {
+  let total = 0;
+  for (const value of values) {
+    total += value * 2;
+  }
+  const doubled = values.map((value) => value * 2);
+  const filtered = doubled.filter((value) => value > 0);
+  const sorted = filtered.sort((left, right) => left - right);
+  const first = sorted[0] ?? 0;
+  const last = sorted[sorted.length - 1] ?? 0;
+  return total + first + last;
+}
+`;
+
+async function repoWithRealDuplicate(): Promise<string> {
+  const cwd = await tempRepo();
+  await write(cwd, "base.ts", "export const base = 1;\n");
+  await commit(cwd, "base");
+  await write(cwd, "a.ts", longDuplicate);
+  await write(cwd, "b.ts", longDuplicate);
+  return cwd;
+}
+
+test("applies a real adapter-produced Tier 0 duplicate in an interactive run", async (t) => {
+  const cwd = await repoWithRealDuplicate();
+  t.after(() => cleanup(cwd));
+  const base = (await git(cwd, ["rev-parse", "HEAD"])).trim();
+
+  const result = await runSweep({
+    kind: "code",
+    cwd,
+    base,
+    runner: sweepRunner(),
+    apply: true,
+    interactive: true,
+    ci: false,
+    testCommand: stubTestCommand,
+    detectors: detectorsFor("code"),
+  });
+
+  assert.ok(result.report.findings.some((finding) => finding.tier === 0));
+  assert.equal(result.apply?.applied, 1);
+  assert.match(await readFile(join(cwd, "b.ts"), "utf8"), /^$/);
+});
+
+test("reverts a real adapter-produced Tier 0 duplicate when the suite goes red", async (t) => {
+  const cwd = await repoWithRealDuplicate();
+  t.after(() => cleanup(cwd));
+  const base = (await git(cwd, ["rev-parse", "HEAD"])).trim();
+
+  const redRunner: CommandRunner = async (command, args, options) =>
+    command === "check"
+      ? { stdout: "", stderr: "", code: 1 }
+      : realCommandRunner(command, args, options);
+
+  const result = await runSweep({
+    kind: "code",
+    cwd,
+    base,
+    runner: redRunner,
+    apply: true,
+    interactive: true,
+    ci: false,
+    testCommand: stubTestCommand,
+    detectors: detectorsFor("code"),
+  });
+
+  assert.equal(result.apply?.applied, 0);
+  assert.equal(result.apply?.reverted, 1);
+  assert.equal(await readFile(join(cwd, "b.ts"), "utf8"), longDuplicate);
 });

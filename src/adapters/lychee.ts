@@ -1,14 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
-import { resolve, relative, sep } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { FindingDraft } from "../contract.ts";
-import type { CommandRunner } from "../exec.ts";
+import type { DetectorInput, FindingDraft } from "../contract.ts";
+import { repoPath } from "../paths.ts";
 import { selectProseFiles } from "../scope.ts";
+import { runTool } from "../tools.ts";
 
-export interface LycheeInput {
-  files: string[];
-  cwd: string;
-  runner: CommandRunner;
+export interface LycheeInput extends DetectorInput {
   /** Defaults to the repo's .lycheeignore, then the bundled one. */
   excludeFile?: string;
 }
@@ -48,10 +46,6 @@ function localIgnore(cwd: string): string {
   return existsSync(local) ? local : bundledIgnore;
 }
 
-function repoPath(cwd: string, path: string): string {
-  return relative(cwd, resolve(cwd, path)).split(sep).join("/");
-}
-
 function ruleFor(status: LycheeStatus): string {
   if (/fragment/i.test(status.text)) {
     return "broken-anchor";
@@ -88,7 +82,8 @@ export async function detect(input: LycheeInput): Promise<FindingDraft[]> {
     return [];
   }
 
-  const result = await input.runner(
+  const result = await runTool(
+    input.runner,
     "lychee",
     [
       "--offline",

@@ -1,13 +1,11 @@
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, resolve, sep } from "node:path";
-import type { FindingDraft } from "../contract.ts";
-import type { CommandRunner } from "../exec.ts";
+import { join, resolve } from "node:path";
+import type { DetectorInput, FindingDraft } from "../contract.ts";
+import { repoPath } from "../paths.ts";
+import { runTool } from "../tools.ts";
 
-export interface JscpdInput {
-  files: string[];
-  cwd: string;
-  runner: CommandRunner;
+export interface JscpdInput extends DetectorInput {
   minTokens?: number;
   minLines?: number;
 }
@@ -29,9 +27,39 @@ interface JscpdReport {
   duplicates: JscpdClone[];
 }
 
-function repoPath(cwd: string, name: string): string {
-  const relativePath = relative(cwd, resolve(cwd, name));
-  return relativePath.split(sep).join("/");
+function fragmentText(content: string, start: number, end: number): string | undefined {
+  const lines = content.split("\n");
+  if (start < 1 || end < start || start > lines.length) {
+    return undefined;
+  }
+  const selected = lines.slice(start - 1, end);
+  if (selected.length === 0) {
+    return undefined;
+  }
+  const trailing = end < lines.length ? "\n" : "";
+  return `${selected.join("\n")}${trailing}`;
+}
+
+async function readFragment(
+  cwd: string,
+  file: string,
+  start: number,
+  end: number,
+): Promise<string | undefined> {
+  try {
+    return fragmentText(await readFile(resolve(cwd, file), "utf8"), start, end);
+  } catch {
+    return undefined;
+  }
+}
+
+function isLater(self: JscpdFile, other: JscpdFile, cwd: string): boolean {
+  const selfFile = repoPath(cwd, self.name);
+  const otherFile = repoPath(cwd, other.name);
+  if (selfFile !== otherFile) {
+    return selfFile > otherFile;
+  }
+  return self.start > other.start;
 }
 
 function draftFor(
@@ -39,10 +67,11 @@ function draftFor(
   self: JscpdFile,
   other: JscpdFile,
   cwd: string,
+  edit?: { oldText: string; newText: string },
 ): FindingDraft {
   const file = repoPath(cwd, self.name);
   const otherFile = repoPath(cwd, other.name);
-  return {
+  const draft: FindingDraft = {
     file,
     line: self.start,
     rule: "duplicate-code",
@@ -52,6 +81,7 @@ function draftFor(
     metrics: { tokens: clone.tokens, lines: clone.lines },
     proposedFix: `Extract the block shared with ${otherFile} or reference the existing implementation`,
   };
+  return edit ? { ...draft, edit } : draft;
 }
 
 /** Normalize jscpd's JSON report into findings drafts. No tiering or apply policy. */
@@ -63,7 +93,8 @@ export async function detect(input: JscpdInput): Promise<FindingDraft[]> {
   const outputDir = await mkdtemp(join(tmpdir(), "pi-sweep-jscpd-"));
   const root = await realpath(input.cwd);
   try {
-    const result = await input.runner(
+    const result = await runTool(
+      input.runner,
       "jscpd",
       [
         "--pattern",
@@ -93,8 +124,31 @@ export async function detect(input: JscpdInput): Promise<FindingDraft[]> {
 
     const drafts: FindingDraft[] = [];
     for (const clone of report.duplicates ?? []) {
-      drafts.push(draftFor(clone, clone.firstFile, clone.secondFile, root));
-      drafts.push(draftFor(clone, clone.secondFile, clone.firstFile, root));
+      const firstLater = isLater(clone.firstFile, clone.secondFile, root);
+      const later = firstLater ? clone.firstFile : clone.secondFile;
+      const laterFragment = await readFragment(root, later.name, later.start, later.end);
+      drafts.push(
+        draftFor(
+          clone,
+          clone.firstFile,
+          clone.secondFile,
+          root,
+          firstLater && laterFragment
+            ? { oldText: laterFragment, newText: "" }
+            : undefined,
+        ),
+      );
+      drafts.push(
+        draftFor(
+          clone,
+          clone.secondFile,
+          clone.firstFile,
+          root,
+          !firstLater && laterFragment
+            ? { oldText: laterFragment, newText: "" }
+            : undefined,
+        ),
+      );
     }
     return drafts;
   } finally {

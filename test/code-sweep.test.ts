@@ -11,8 +11,14 @@ test("wires linters, duplication, and zero-fanout into code sweeps", () => {
   );
   assert.deepEqual(
     detectorsFor("test").map((detector) => detector.name),
-    ["eslint-jest", "jscpd-tests"],
+    ["eslint-jest", "jscpd-tests", "no-assertion"],
   );
+});
+
+test("registers jscpd once when the umbrella combines every charter", () => {
+  const names = detectorsFor("sweep").map((detector) => detector.name);
+
+  assert.equal(names.filter((name) => name === "jscpd").length, 1);
 });
 
 test("a code sweep without a lens client reports zero-fanout unavailable", async (t) => {

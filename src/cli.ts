@@ -1,16 +1,7 @@
 #!/usr/bin/env node
-import { runSweep, type SweepKind } from "./pipeline.ts";
+import { runSweep } from "./pipeline.ts";
 import { runUmbrella } from "./umbrella.ts";
-
-const KINDS = new Set<SweepKind>(["sweep", "code", "test", "prose"]);
-
-interface CliOptions {
-  kind: SweepKind;
-  base?: string;
-  fullAudit: boolean;
-  apply: boolean;
-  json: boolean;
-}
+import { parseSweepArgs, type ParsedSweepArgs } from "./args.ts";
 
 function usage(): string {
   return [
@@ -28,55 +19,13 @@ function usage(): string {
   ].join("\n");
 }
 
-function parseArgs(argv: string[]): CliOptions {
-  let kind: SweepKind = "sweep";
-  let base: string | undefined;
-  let fullAudit = false;
-  let apply = false;
-  let json = false;
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index]!;
-    switch (arg) {
-      case "--base": {
-        const value = argv[index + 1];
-        if (!value) {
-          throw new Error("--base needs a ref");
-        }
-        base = value;
-        index += 1;
-        break;
-      }
-      case "--full-audit":
-        fullAudit = true;
-        break;
-      case "--report-only":
-        apply = false;
-        break;
-      case "--apply":
-        apply = true;
-        break;
-      case "--json":
-        json = true;
-        break;
-      case "--help":
-      case "-h": {
-        console.log(usage());
-        process.exit(0);
-        break;
-      }
-      default:
-        if (arg.startsWith("-")) {
-          throw new Error(`unknown option: ${arg}`);
-        }
-        if (!KINDS.has(arg as SweepKind)) {
-          throw new Error(`unknown sweep kind: ${arg}`);
-        }
-        kind = arg as SweepKind;
-    }
+function parseArgs(argv: string[]): ParsedSweepArgs {
+  const options = parseSweepArgs(argv);
+  if (options.help) {
+    console.log(usage());
+    process.exit(0);
   }
-
-  return { kind, base, fullAudit, apply, json };
+  return options;
 }
 
 async function main(): Promise<void> {
@@ -85,7 +34,6 @@ async function main(): Promise<void> {
     cwd: process.cwd(),
     base: options.base,
     fullAudit: options.fullAudit,
-    reportOnly: !options.apply,
     apply: options.apply,
   };
   const result =
