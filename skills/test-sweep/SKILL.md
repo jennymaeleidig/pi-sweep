@@ -46,13 +46,50 @@ Read the `Detectors:` section of the output. A detector reported **unavailable**
 (no ESLint setup, no JavaScript/TypeScript test files, or a missing executable) has
 not run; say so in the report and never describe that check as clean.
 
+## 2b. Mutation testing is opt-in, never per-session
+
+The sweep never runs a mutation tool. A repository that wants mutation evidence
+declares a mise task named `mutation`, `mutation:<language>`, or tagged `mutation`
+and runs it on a per-PR or nightly cadence, outside the sweep:
+
+```toml
+# mise.toml — JavaScript/TypeScript
+[tasks.mutation]
+run = "npx stryker run"
+env = { MUTATION_REPORT = "reports/mutation/mutation.json" }
+
+# Python
+[tasks."mutation:py"]
+run = "mutmut run && mutmut export-json > mutmut.json"
+
+# Rust
+[tasks."mutation:rs"]
+tags = ["mutation"]
+run = "cargo mutants --json"
+```
+
+The sweep only **ingests** the JSON report when it exists. Conventional locations:
+`reports/mutation/mutation.json` or `mutation-report.json` (Stryker),
+`mutmut.json` or `mutants/mutmut.json` (mutmut), and
+`mutants.out/outcomes.json` (cargo-mutants). A task or `[env]` block may declare a
+different path in `MUTATION_REPORT` (or `PI_SWEEP_MUTATION_REPORT`); the same name
+is also read from the environment. Surviving mutants enter the gate as Tier 1
+findings with detector `mutation` — they are evidence, never auto-applied.
+
+Freshness is mandatory: the report must be at least as new as HEAD and the changed
+test/source files. An older report is reported as **unavailable — stale**, its
+score is ignored, and it never makes a file mutation-clean. No declared task and no
+report means no mutation evidence at all; the rest of the sweep is unchanged.
+
 ## 3. Build deterministic exemptions
 
 Before dispatching any sub-agent, mark what the tools already settled:
 
 - **jscpd-clean** — test files with no `jscpd-tests` finding.
 - **mutation-clean** — test files from a fresh mutation score, when the repository
-  provides one. If no fresh score exists, omit this list rather than guessing.
+  provides one: files the report covered with no surviving mutant. A stale report
+  yields no mutation-clean files. If no fresh score exists, omit this list rather
+  than guessing.
 
 The axis judges only files outside both lists. Never send an exempt file to the
 sub-agent for a second opinion on the thing that was already proven.

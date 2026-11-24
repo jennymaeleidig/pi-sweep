@@ -30,8 +30,11 @@ const TIER_ZERO_RULES = new Set<string>([
 /** Only the repo-lint detector may reach Tier 0; agent-authored findings may not. */
 const TIER_ZERO_DETECTOR = "linter";
 
-/** Zero-fanout deletion candidates never auto-apply, however clean they look. */
-const PERMANENT_TIER_ONE_DETECTORS = new Set<string>(["zero-fanout"]);
+/**
+ * Zero-fanout deletion candidates and mutation survivors never auto-apply,
+ * however clean the surrounding evidence looks.
+ */
+const PERMANENT_TIER_ONE_DETECTORS = new Set<string>(["zero-fanout", "mutation"]);
 const PERMANENT_TIER_ONE_RULES = new Set<string>(["zero-fanout"]);
 
 /** The one-line explanation shown when Tier 0 is gated instead of applied. */

@@ -13,6 +13,7 @@ import type { LensClient } from "./adapters/zero-fanout.ts";
 import { codeDetectors } from "./sweeps/code.ts";
 import { testDetectors } from "./sweeps/test.ts";
 import { proseDetectors } from "./sweeps/prose.ts";
+import { loadMutationEvidence, type MutationEvidence } from "./mutation.ts";
 
 export type SweepKind = "sweep" | "code" | "test" | "prose";
 
@@ -57,12 +58,20 @@ export interface SweepRequest {
   testCommand?: TestCommand | null;
   detectors?: Detector[];
   lens?: LensClient;
+  /** Explicit mutation report path; the declaration and convention are used otherwise. */
+  mutationReportPath?: string;
+  /** Override the measured freshness baseline, mainly for tests. */
+  mutationLatestChangeMs?: number;
+  /** Clock used for the mutation evidence timestamp, mainly for tests. */
+  mutationNow?: () => number;
 }
 
 export interface SweepResult {
   report: SweepReport;
   markdown: string;
   apply?: ApplyResult;
+  /** Fresh or stale mutation evidence; absent when the repository has not opted in. */
+  mutation?: MutationEvidence;
 }
 
 const jscpdDetector: Detector = {
@@ -160,6 +169,29 @@ export async function runSweep(request: SweepRequest): Promise<SweepResult> {
     }
   }
 
+  let mutation: MutationEvidence | undefined;
+  if (request.kind === "test" || request.kind === "sweep") {
+    const evidence = await loadMutationEvidence({
+      cwd: request.cwd,
+      runner,
+      files: selection.files,
+      ...(request.mutationReportPath ? { reportPath: request.mutationReportPath } : {}),
+      ...(typeof request.mutationLatestChangeMs === "number"
+        ? { latestChangeMs: request.mutationLatestChangeMs }
+        : {}),
+      ...(request.mutationNow ? { now: request.mutationNow } : {}),
+    });
+    if (evidence.status === "fresh") {
+      drafts.push(...evidence.findings);
+      mutation = evidence;
+    } else if (evidence.status === "stale" || evidence.status === "unknown-shape") {
+      unavailable.push(`mutation: ${evidence.reason ?? evidence.status}`);
+      mutation = evidence;
+    } else if (evidence.reason) {
+      mutation = evidence;
+    }
+  }
+
   const gated = finalizeFindings(drafts, { policy });
   const applyResult = request.apply
     ? await applyFindings({
@@ -193,5 +225,12 @@ export async function runSweep(request: SweepRequest): Promise<SweepResult> {
   }
   const markdown = withDetectorStatuses(sections.join("\n\n"), detectorStatuses);
 
-  return applyResult ? { report, markdown, apply: applyResult } : { report, markdown };
+  const result: SweepResult = { report, markdown };
+  if (applyResult) {
+    result.apply = applyResult;
+  }
+  if (mutation) {
+    result.mutation = mutation;
+  }
+  return result;
 }
