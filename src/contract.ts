@@ -41,4 +41,12 @@ export interface SweepReport {
   files: string[];
   findings: Finding[];
   gate: GateTable;
+  detectors?: DetectorStatus[];
+}
+
+/** Whether a detector could run, so an unavailable tool is not mistaken for a clean one. */
+export interface DetectorStatus {
+  name: string;
+  available: boolean;
+  reason?: string;
 }
