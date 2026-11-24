@@ -1,0 +1,8 @@
+[tools]
+node = "26.13.1"
+pnpm = "12.21.0"
+"npm:typescript" = "7.0.2"
+"npm:typescript-language-server" = "6.1.0"
+"npm:yaml-language-server" = "2.0.0"
+"npm:bash-language-server" = "5.8.1"
+taplo = "0.10.0"
