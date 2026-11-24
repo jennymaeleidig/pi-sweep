@@ -2,11 +2,21 @@ import type { Finding, SweepCharter } from "./contract.ts";
 import { isConfigPath, isProseFile, isProsePath, neverEditReason } from "./scope.ts";
 import { isTestPath } from "./test-paths.ts";
 
+/** Name-shape fallback for findings that carry no sweep origin. */
 const COMMENT_FINDING = /(?:^|[^a-z])(?:prose|comment|docstring|docs?)(?:[^a-z]|$)/i;
 
-function isCommentFinding(finding: Finding | undefined): boolean {
+/**
+ * Whether a finding is prose-editable. The structural signal wins: a finding
+ * whose origin charter is "prose" is a prose finding whatever its rule or
+ * category is named. The name regex is a last resort for bare drafts with
+ * no origin at all.
+ */
+function isProseFinding(finding: Finding | undefined): boolean {
   if (!finding) {
     return false;
+  }
+  if (finding.sweep !== undefined) {
+    return finding.sweep === "prose";
   }
   return (
     COMMENT_FINDING.test(finding.category ?? "") ||
@@ -43,7 +53,7 @@ export function charterAllows(
   if (DEFAULT_ALLOWS[charter](path)) {
     return true;
   }
-  return charter === "prose" && isCommentFinding(finding) && !isTestPath(path);
+  return charter === "prose" && isProseFinding(finding) && !isTestPath(path);
 }
 
 /** Why a path falls outside a charter, or null when it belongs to it. */

@@ -28,6 +28,36 @@ test("allows prose edits on comment findings in source files", () => {
   );
 });
 
+test("routes any prose-origin finding on a source file, whatever it is named", () => {
+  assert.equal(
+    charterAllows(
+      "prose",
+      "src/app.ts",
+      finding({ sweep: "prose", rule: "stale-word", category: "style", detector: "vale" }),
+    ),
+    true,
+  );
+  assert.equal(
+    charterAllows(
+      "prose",
+      "src/app.ts",
+      finding({ sweep: "code", category: "comment" }),
+    ),
+    false,
+  );
+});
+
+test("a bare draft with no origin never routes into prose apply on naming alone", () => {
+  assert.equal(
+    charterAllows(
+      "prose",
+      "src/app.ts",
+      finding({ rule: "stale-word", category: "style", detector: "agent:generic" }),
+    ),
+    false,
+  );
+});
+
 test("keeps prose charter exclusions for tests, decisions, and generated files", () => {
   assert.equal(
     charterAllows("prose", "test/app.test.ts", finding({ category: "comment" })),
