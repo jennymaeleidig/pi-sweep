@@ -72,6 +72,32 @@ test("reports cleanly when detectors find nothing", async (t) => {
   assert.match(result.markdown, /^No findings\./);
 });
 
+test("reports unavailable detector coverage instead of calling it clean", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+
+  await write(cwd, "base.ts", "export const base = 1;\n");
+  await commit(cwd, "base");
+
+  const result = await runSweep({
+    kind: "sweep",
+    cwd,
+    runner: realCommandRunner,
+    detectors: [
+      {
+        name: "probe",
+        detect: async () => [],
+        unavailable: async () => ["zero-fanout: pi-lens module_report is unavailable"],
+      },
+    ],
+  });
+
+  assert.deepEqual(result.report.unavailable, [
+    "zero-fanout: pi-lens module_report is unavailable",
+  ]);
+  assert.match(result.markdown, /\*\*Unavailable:\*\* .*pi-lens module_report is unavailable/);
+});
+
 test("normalizes real jscpd findings end to end", async (t) => {
   const cwd = await tempRepo();
   t.after(() => cleanup(cwd));

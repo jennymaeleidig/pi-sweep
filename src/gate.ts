@@ -14,7 +14,17 @@ import type {
  */
 const TIER_ZERO_RULES = new Set<string>();
 
+/** Zero-fanout deletion candidates never auto-apply, however clean they look. */
+const PERMANENT_TIER_ONE_DETECTORS = new Set<string>(["zero-fanout"]);
+const PERMANENT_TIER_ONE_RULES = new Set<string>(["zero-fanout"]);
+
 export function tierForDraft(draft: FindingDraft): Tier {
+  if (
+    PERMANENT_TIER_ONE_DETECTORS.has(draft.detector) ||
+    PERMANENT_TIER_ONE_RULES.has(draft.rule)
+  ) {
+    return 1;
+  }
   if (TIER_ZERO_RULES.has(draft.rule)) {
     return 0;
   }

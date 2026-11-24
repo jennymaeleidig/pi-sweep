@@ -41,4 +41,6 @@ export interface SweepReport {
   files: string[];
   findings: Finding[];
   gate: GateTable;
+  /** Detector coverage that was unavailable; absence is never reported as clean. */
+  unavailable?: string[];
 }
