@@ -44,3 +44,23 @@ test("prints the markdown gate table by default", async (t) => {
   assert.match(stdout, /### a\.ts/);
   assert.match(stdout, /\| Line \| Tier \| Rule \| Evidence \| Proposed fix \|/);
 });
+
+test("runs the umbrella when the sweep kind is named", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+
+  await write(cwd, "base.ts", "export const base = 1;\n");
+  await commit(cwd, "base");
+  await write(cwd, "a.ts", duplicateSource);
+  await write(cwd, "b.ts", duplicateSource);
+
+  const { stdout } = await exec(process.execPath, [cli, "sweep", "--json"], { cwd });
+  const report = JSON.parse(stdout) as {
+    sweeps: Record<string, { findings: Array<{ rule: string }> }>;
+    findings: Array<{ rule: string; sweep?: string }>;
+  };
+
+  assert.deepEqual(Object.keys(report.sweeps), ["code", "test", "prose"]);
+  assert.ok(report.findings.some((finding) => finding.rule === "duplicate-code"));
+  assert.ok(report.findings.every((finding) => finding.sweep !== undefined));
+});

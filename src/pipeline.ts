@@ -1,9 +1,11 @@
 import type {
   DetectorStatus,
   FindingDraft,
+  SweepCharter,
   SweepReport,
 } from "./contract.ts";
-import { selectFiles } from "./diff.ts";
+import { selectFiles, type DiffSelection } from "./diff.ts";
+import { applyWithinCharter } from "./charter.ts";
 import { realCommandRunner, type CommandRunner } from "./exec.ts";
 import { buildGateTable, decideForPolicy, finalizeFindings, isCiEnvironment, renderGateTable, type GatePolicy } from "./gate.ts";
 import { applyFindings, renderApplyReport, type ApplyDecision, type ApplyResult } from "./apply.ts";
@@ -15,7 +17,7 @@ import { testDetectors } from "./sweeps/test.ts";
 import { proseDetectors } from "./sweeps/prose.ts";
 import { loadMutationEvidence, type MutationEvidence } from "./mutation.ts";
 
-export type SweepKind = "sweep" | "code" | "test" | "prose";
+export type SweepKind = "sweep" | SweepCharter;
 
 export interface DetectorInput {
   files: string[];
@@ -64,6 +66,10 @@ export interface SweepRequest {
   mutationLatestChangeMs?: number;
   /** Clock used for the mutation evidence timestamp, mainly for tests. */
   mutationNow?: () => number;
+  /** Pre-resolved selection, so an umbrella runs every sweep over one snapshot. */
+  selection?: DiffSelection;
+  /** Origin charter stamped onto drafts when the caller runs one sweep of several. */
+  sweep?: SweepCharter;
 }
 
 export interface SweepResult {
@@ -135,12 +141,14 @@ export async function runSweep(request: SweepRequest): Promise<SweepResult> {
       ? { jscpdMinTokens: request.jscpdMinTokens }
       : {}),
   };
-  const selection = await selectFiles({
-    cwd: request.cwd,
-    runner,
-    base: request.base,
-    fullAudit: request.fullAudit,
-  });
+  const selection =
+    request.selection ??
+    (await selectFiles({
+      cwd: request.cwd,
+      runner,
+      base: request.base,
+      fullAudit: request.fullAudit,
+    }));
 
   const detectors = request.detectors ?? detectorsFor(request.kind, { lens: request.lens });
   const drafts: FindingDraft[] = [];
@@ -192,17 +200,24 @@ export async function runSweep(request: SweepRequest): Promise<SweepResult> {
     }
   }
 
-  const gated = finalizeFindings(drafts, { policy });
+  const origin =
+    request.sweep ?? (request.kind === "sweep" ? undefined : request.kind);
+  const tagged = origin
+    ? drafts.map((draft) => (draft.sweep ? draft : { ...draft, sweep: origin }))
+    : drafts;
+  const finalized = finalizeFindings(tagged, { policy });
+  const applyCandidates =
+    request.kind === "sweep" ? finalized : applyWithinCharter(request.kind, finalized);
   const applyResult = request.apply
     ? await applyFindings({
         cwd: request.cwd,
-        findings: gated,
+        findings: applyCandidates,
         runner,
         decide: request.decide ?? decideForPolicy(policy),
         testCommand: request.testCommand,
       })
     : undefined;
-  const findings = applyResult?.findings ?? gated;
+  const findings = applyResult?.findings ?? finalized;
   const gate = buildGateTable(findings);
   const unavailableMessages = [...new Set(unavailable.filter(Boolean))];
   const report: SweepReport = {

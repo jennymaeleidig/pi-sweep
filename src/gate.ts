@@ -140,7 +140,13 @@ export function decideForPolicy(
   policy: GatePolicy = {},
 ): (finding: Finding) => GateAction {
   const mayApply = tierZeroMayApply(policy);
-  return (finding) => (finding.tier === 0 && mayApply ? "apply" : "ask");
+  return (finding) => {
+    // A charter can force a finding out of scope; that skip outranks tier policy.
+    if (finding.action === "skip") {
+      return "skip";
+    }
+    return finding.tier === 0 && mayApply ? "apply" : "ask";
+  };
 }
 
 export function groupByFile(findings: Finding[]): GateFile[] {

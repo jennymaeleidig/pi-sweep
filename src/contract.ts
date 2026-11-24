@@ -5,6 +5,9 @@
 
 export type Tier = 0 | 1 | 2;
 
+/** Which sweep charter produced a finding. */
+export type SweepCharter = "code" | "test" | "prose";
+
 export type GateAction = "apply" | "skip" | "ask";
 
 /** A single structured text replacement a finding can apply and revert. */
@@ -21,6 +24,8 @@ export interface Finding {
   evidence: string;
   tier: Tier;
   detector: string;
+  /** Origin charter, set when findings from several sweeps are merged. */
+  sweep?: SweepCharter;
   category?: string;
   proposedFix?: string;
   /** Detector-supplied measurements used by tier policy (duplicate size, etc.). */

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runSweep, type SweepKind } from "./pipeline.ts";
+import { runUmbrella } from "./umbrella.ts";
 
 const KINDS = new Set<SweepKind>(["sweep", "code", "test", "prose"]);
 
@@ -14,6 +15,8 @@ interface CliOptions {
 function usage(): string {
   return [
     "Usage: node src/cli.ts <sweep|code|test|prose> [options]",
+    "",
+    "The sweep kind runs code, test, and prose against one basepoint and merges their tables.",
     "",
     "Options:",
     "  --base <ref>       SHA, branch, tag, or merge-base:<ref> (default: HEAD)",
@@ -78,14 +81,17 @@ function parseArgs(argv: string[]): CliOptions {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  const result = await runSweep({
-    kind: options.kind,
+  const request = {
     cwd: process.cwd(),
     base: options.base,
     fullAudit: options.fullAudit,
     reportOnly: !options.apply,
     apply: options.apply,
-  });
+  };
+  const result =
+    options.kind === "sweep"
+      ? await runUmbrella(request)
+      : await runSweep({ ...request, kind: options.kind });
 
   if (options.json) {
     console.log(JSON.stringify(result.report, null, 2));
