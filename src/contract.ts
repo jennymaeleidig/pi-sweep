@@ -10,6 +10,9 @@ export type SweepCharter = "code" | "test" | "prose";
 
 export type GateAction = "apply" | "skip" | "ask";
 
+/** How a detector proved its finding: mechanically, or by agent judgment. */
+export type EvidenceClass = "machine" | "agent";
+
 /** A single structured text replacement a finding can apply and revert. */
 export interface FindingEdit {
   oldText: string;
@@ -24,6 +27,8 @@ export interface Finding {
   evidence: string;
   tier: Tier;
   detector: string;
+  /** How the detector proved this finding; machine evidence tiers below agent judgment. */
+  evidenceClass?: EvidenceClass;
   /** Origin charter, set when findings from several sweeps are merged. */
   sweep?: SweepCharter;
   category?: string;

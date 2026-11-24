@@ -112,12 +112,14 @@ async function corroborate(
           (hit) => !(hit.file === file && hit.line === startLine),
         );
   const stringHits = hits.filter((hit) => isStringReference(name, hit.text));
-  const detail =
-    stringHits.length > 0
-      ? `string-invocation hits: ${quote(stringHits)}`
-      : hits.length > 0
-        ? `string-grep hits outside the declaration: ${quote(hits)}`
-        : "string-grep found no references outside the declaration";
+  let detail: string;
+  if (stringHits.length > 0) {
+    detail = `string-invocation hits: ${quote(stringHits)}`;
+  } else if (hits.length > 0) {
+    detail = `string-grep hits outside the declaration: ${quote(hits)}`;
+  } else {
+    detail = "string-grep found no references outside the declaration";
+  }
   return {
     evidence: `zero fanout for "${name}" (usedBy=0, fanout=0); ${detail}`,
   };
@@ -130,6 +132,7 @@ function draftFor(symbol: ModuleReportSymbol, file: string, evidence: string): F
     rule: "zero-fanout",
     evidence,
     detector: "zero-fanout",
+    evidenceClass: "machine",
     category: "dead-code",
     proposedFix: `Remove ${symbol.name} only after confirming no dynamic caller uses it`,
   };

@@ -420,6 +420,7 @@ export function mutationFindings(report: MutationReport): FindingDraft[] {
     rule: MUTATION_RULE,
     evidence: `${entry.mutator} — ${entry.status}${entry.replacement ? ` (${entry.replacement})` : ""}`,
     detector: "mutation",
+    evidenceClass: "machine",
   }));
 }
 

@@ -77,6 +77,7 @@ function draftFor(
     rule: "duplicate-code",
     evidence: `${clone.lines} lines (${clone.tokens} tokens) duplicated with ${otherFile}:${other.start}-${other.end}`,
     detector: "jscpd",
+    evidenceClass: "machine",
     category: "duplication",
     metrics: { tokens: clone.tokens, lines: clone.lines },
     proposedFix: `Extract the block shared with ${otherFile} or reference the existing implementation`,

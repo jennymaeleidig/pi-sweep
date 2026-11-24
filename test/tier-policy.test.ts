@@ -35,6 +35,7 @@ function linterDraft(overrides: Partial<FindingDraft> = {}): FindingDraft {
     rule: "no-unused-vars",
     evidence: "'unused' is declared but never used",
     detector: "linter",
+    evidenceClass: "machine",
     category: "lint",
     proposedFix: "Remove the unused symbol",
     edit: { oldText: "alpha", newText: "fixed" },
@@ -49,6 +50,7 @@ function duplicateDraft(tokens: number): FindingDraft {
     rule: "duplicate-code",
     evidence: "7 lines duplicated with other.ts:1-7",
     detector: "jscpd",
+    evidenceClass: "machine",
     category: "duplication",
     metrics: { tokens, lines: 7 },
   };
@@ -119,7 +121,32 @@ test("routes allowlisted linter unused-symbol rules to Tier 0 across plugin pref
 test("keeps unlisted linter rules at Tier 1 and agent rules at Tier 2", () => {
   assert.equal(tierForDraft(linterDraft({ rule: "no-console" }), interactive), 1);
   assert.equal(
-    tierForDraft(linterDraft({ detector: "agent:code", rule: "no-unused-vars" }), interactive),
+    tierForDraft(
+      linterDraft({ detector: "agent:code", rule: "no-unused-vars", evidenceClass: undefined }),
+      interactive,
+    ),
+    2,
+  );
+});
+
+test("tiers any detector that declares machine evidence, whatever its name", () => {
+  assert.equal(
+    tierForDraft(
+      linterDraft({ detector: "some-new-adapter", rule: "its-rule", edit: undefined }),
+      interactive,
+    ),
+    1,
+  );
+  assert.equal(
+    tierForDraft(
+      linterDraft({
+        detector: "some-new-adapter",
+        rule: "its-rule",
+        edit: undefined,
+        evidenceClass: undefined,
+      }),
+      interactive,
+    ),
     2,
   );
 });
@@ -135,7 +162,13 @@ test("routes every machine-evidenced detector to Tier 1 unless it earns Tier 0",
       `${detector} is machine-evidenced`,
     );
   }
-  assert.equal(tierForDraft(linterDraft({ detector: "axis", rule: "weak-test" }), interactive), 2);
+  assert.equal(
+    tierForDraft(
+      linterDraft({ detector: "axis", rule: "weak-test", evidenceClass: undefined }),
+      interactive,
+    ),
+    2,
+  );
 });
 
 test("keeps zero-fanout findings gated even when their rule looks allowlisted", () => {
@@ -248,7 +281,11 @@ test("Tier 2 findings wait for confirmation even in an interactive session", asy
     testCommand: stubTestCommand,
     detectors: [
       detectorReturning([
-        linterDraft({ detector: "agent:code", rule: "docs-vs-shipped-behavior" }),
+        linterDraft({
+          detector: "agent:code",
+          rule: "docs-vs-shipped-behavior",
+          evidenceClass: undefined,
+        }),
       ]),
     ],
   });

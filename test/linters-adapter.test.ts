@@ -45,6 +45,7 @@ test("runs only declared lint tasks over the changed files", async () => {
       rule: "no-unused-vars",
       evidence: "'old' is never used",
       detector: "linter",
+      evidenceClass: "machine",
       category: "lint",
     },
   ]);

@@ -64,6 +64,7 @@ function draftFor(cwd: string, file: string, link: LycheeLink): FindingDraft {
     rule,
     evidence: `${link.url}: ${link.status.text}`,
     detector: "lychee",
+    evidenceClass: "machine",
     category: "references",
     proposedFix:
       rule === "broken-anchor"

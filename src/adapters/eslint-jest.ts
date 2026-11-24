@@ -167,6 +167,7 @@ function draftFor(message: EslintMessage, file: string): FindingDraft {
     rule: RULE_MAP[message.ruleId ?? ""] ?? message.ruleId ?? "eslint-jest",
     evidence: message.message,
     detector: "eslint-jest",
+    evidenceClass: "machine",
     category: "assertion-hygiene",
   };
 }

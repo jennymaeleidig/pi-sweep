@@ -124,6 +124,7 @@ test("reads a repo-declared mutation report path from mise", async (t: TestConte
     rule: "mutation-survived",
     evidence: "ArithmeticOperator — Survived (-)",
     detector: "mutation",
+    evidenceClass: "machine",
   });
   assert.deepEqual(evidence.cleanFiles, ["src/clean.ts"]);
 });

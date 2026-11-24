@@ -259,6 +259,7 @@ function toDraft(message: NormalizedMessage): FindingDraft {
     rule: message.rule,
     evidence: message.message,
     detector: "linter",
+    evidenceClass: "machine",
     category: "lint",
   };
 }

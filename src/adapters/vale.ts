@@ -31,6 +31,7 @@ function draftFor(cwd: string, file: string, alert: ValeAlert): FindingDraft {
     rule: alert.Check,
     evidence: alert.Match ? `${alert.Message} ("${alert.Match}")` : alert.Message,
     detector: "vale",
+    evidenceClass: "machine",
     category: "slop",
     proposedFix: suggestion
       ? `Write '${suggestion}' instead`

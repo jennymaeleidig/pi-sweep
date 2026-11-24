@@ -85,6 +85,7 @@ test("assigns jscpd duplicates machine-evidenced tier and stable ids", () => {
     rule: "duplicate-code",
     evidence: "3 lines duplicated with src/b.ts:5-7",
     detector: "jscpd",
+    evidenceClass: "machine",
     proposedFix: "Extract the shared block",
   };
 

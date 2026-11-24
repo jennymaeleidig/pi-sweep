@@ -33,22 +33,6 @@ const TIER_ZERO_RULES = new Set<string>([
 const LINTER_DETECTORS = new Set<string>(["linter", "linters"]);
 
 /**
- * Detectors that prove their finding mechanically. Anything outside this set
- * is an agent or axis judgment, which always waits at Tier 2.
- */
-const MACHINE_DETECTORS = new Set<string>([
-  "jscpd",
-  "jscpd-tests",
-  "linter",
-  "linters",
-  "lychee",
-  "vale",
-  "eslint-jest",
-  "mutation",
-  "zero-fanout",
-]);
-
-/**
  * Zero-fanout deletion candidates and mutation survivors never auto-apply,
  * however clean the surrounding evidence looks.
  */
@@ -115,7 +99,7 @@ export function tierForDraft(draft: FindingDraft, policy: GatePolicy = {}): Tier
   ) {
     return 1;
   }
-  if (!MACHINE_DETECTORS.has(draft.detector)) {
+  if (draft.evidenceClass !== "machine") {
     return 2;
   }
   if (LINTER_DETECTORS.has(draft.detector) && isAllowlistedRule(draft.rule)) {

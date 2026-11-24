@@ -103,6 +103,7 @@ function jsFindings(file: string, source: string): FindingDraft[] {
       rule: "no-assertion",
       evidence: "test block has no assertion call",
       detector: "no-assertion",
+      evidenceClass: "machine",
       category: "assertion-hygiene",
       proposedFix: "Add an assertion or mark the test skip/todo",
     });
@@ -140,6 +141,7 @@ function pyFindings(file: string, source: string): FindingDraft[] {
       rule: "no-assertion",
       evidence: `${match[2] ?? "test"} has no assertion`,
       detector: "no-assertion",
+      evidenceClass: "machine",
       category: "assertion-hygiene",
       proposedFix: "Add an assertion or mark the test pytest.skip",
     });
