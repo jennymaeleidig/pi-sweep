@@ -110,6 +110,26 @@ test("full audit selects tracked and untracked files", async (t) => {
   assert.deepEqual(selection.files, ["tracked.ts", "untracked.ts"]);
 });
 
+test("selects the whole file when only one line changed", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+
+  const original = Array.from({ length: 20 }, (_, index) => `export const line${index} = ${index};`).join("\n");
+  await write(cwd, "src/module.ts", `${original}\n`);
+  await commit(cwd, "module");
+  const base = (await git(cwd, ["rev-parse", "HEAD"])).trim();
+
+  await write(
+    cwd,
+    "src/module.ts",
+    `${original.replace("line10 = 10", "line10 = 100")}\n`,
+  );
+
+  const selection = await selectFiles({ cwd, runner: realCommandRunner, base });
+
+  assert.deepEqual(selection.files, ["src/module.ts"]);
+});
+
 test("records a rename's old path without sweeping the missing file", async (t) => {
   const cwd = await tempRepo();
   t.after(() => cleanup(cwd));

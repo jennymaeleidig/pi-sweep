@@ -1,5 +1,6 @@
 import { runSweep, type SweepKind } from "./pipeline.ts";
 import type { CommandOptions, CommandRunner } from "./exec.ts";
+import type { LensClient, ModuleReport } from "./adapters/zero-fanout.ts";
 
 interface PiExecResult {
   stdout: string;
@@ -27,6 +28,8 @@ export interface SweepHost {
       handler: (args: string, ctx: SweepCommandContext) => Promise<void> | void;
     },
   ): void;
+  /** Optional bridge to pi-lens `module_report`; absent means zero-fanout is unavailable. */
+  moduleReport?(file: string): Promise<ModuleReport | null>;
 }
 
 export interface SweepCommandOptions {
@@ -81,6 +84,16 @@ export function createPiRunner(pi: Pick<SweepHost, "exec">): CommandRunner {
   };
 }
 
+export function createLensClient(
+  pi: Pick<SweepHost, "moduleReport">,
+): LensClient | undefined {
+  const moduleReport = pi.moduleReport?.bind(pi);
+  if (!moduleReport) {
+    return undefined;
+  }
+  return { moduleReport: (file) => moduleReport(file) };
+}
+
 export default function sweepExtension(pi: SweepHost): void {
   pi.registerCommand("sweep-report", {
     description:
@@ -95,6 +108,7 @@ export default function sweepExtension(pi: SweepHost): void {
         reportOnly: options.apply !== true,
         apply: options.apply,
         runner: createPiRunner(pi),
+        lens: createLensClient(pi),
       });
       ctx.ui.notify(result.markdown, "info");
     },

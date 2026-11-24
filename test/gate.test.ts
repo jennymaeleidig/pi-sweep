@@ -97,6 +97,21 @@ test("assigns jscpd duplicates machine-evidenced tier and stable ids", () => {
   assert.equal(repeated[1]?.id, "jscpd:duplicate-code:src/a.ts:5#2");
 });
 
+test("keeps zero-fanout findings gated even when the graph looks clean", () => {
+  const draft: FindingDraft = {
+    file: "src/orphan.ts",
+    line: 4,
+    rule: "zero-fanout",
+    evidence: "zero fanout for orphanHelper; string-grep found no references",
+    detector: "zero-fanout",
+  };
+
+  const [finding] = finalizeFindings([draft]);
+
+  assert.equal(finding?.tier, 1);
+  assert.equal(finding?.action, "ask");
+});
+
 test("leaves findings no tool has evidenced for judgment", () => {
   const [finding] = finalizeFindings([
     {

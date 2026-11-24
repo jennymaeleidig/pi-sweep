@@ -57,3 +57,55 @@ test("registers a command that reports findings through the pipeline", async (t)
   assert.equal(notices.length, 1);
   assert.match(notices[0] ?? "", /duplicate-code/);
 });
+
+test("uses the host module report bridge for zero-fanout findings", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+
+  await write(cwd, "base.ts", "export const base = 1;\n");
+  await commit(cwd, "base");
+  await write(cwd, "orphan.ts", "export function orphanHelper() {\n  return 1;\n}\n");
+
+  let registered:
+    | {
+        name: string;
+        handler: (args: string, ctx: SweepCommandContext) => Promise<void> | void;
+      }
+    | undefined;
+
+  const pi: SweepHost = {
+    exec: (command, args, options) => realCommandRunner(command, args, options),
+    registerCommand: (name, options) => {
+      registered = { name, handler: options.handler };
+    },
+    moduleReport: async (file) => {
+      if (file !== "orphan.ts") {
+        return null;
+      }
+      return {
+        available: true,
+        api: [
+          {
+            name: "orphanHelper",
+            kind: "function",
+            startLine: 1,
+            usedBy: [],
+            fanout: 0,
+          },
+        ],
+      };
+    },
+  };
+
+  sweepExtension(pi);
+
+  const notices: string[] = [];
+  await registered?.handler("code", {
+    cwd,
+    ui: { notify: (message) => notices.push(message) },
+  });
+
+  assert.equal(notices.length, 1);
+  assert.match(notices[0] ?? "", /zero-fanout/);
+  assert.match(notices[0] ?? "", /orphanHelper/);
+});
