@@ -50,4 +50,12 @@ export interface SweepReport {
   gate: GateTable;
   /** Detector coverage that was unavailable; absence is never reported as clean. */
   unavailable?: string[];
+  detectors?: DetectorStatus[];
+}
+
+/** Whether a detector could run, so an unavailable tool is not mistaken for a clean one. */
+export interface DetectorStatus {
+  name: string;
+  available: boolean;
+  reason?: string;
 }
