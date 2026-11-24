@@ -55,6 +55,7 @@ test("normalizes each duplicate into drafts for both files", async () => {
     assert.equal(draft.detector, "jscpd");
     assert.equal(draft.rule, "duplicate-code");
     assert.equal(draft.category, "duplication");
+    assert.deepEqual(draft.metrics, { tokens: 40, lines: 5 });
     assert.ok(draft.proposedFix);
   }
   assert.match(drafts[0]?.evidence ?? "", /duplicated with src\/b\.ts:12-16/);

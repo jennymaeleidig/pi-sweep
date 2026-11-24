@@ -1,4 +1,5 @@
 import { runSweep, type SweepKind } from "./pipeline.ts";
+import { isCiEnvironment } from "./gate.ts";
 import type { CommandOptions, CommandRunner } from "./exec.ts";
 import type { LensClient, ModuleReport } from "./adapters/zero-fanout.ts";
 
@@ -10,6 +11,8 @@ interface PiExecResult {
 
 export interface SweepCommandContext {
   cwd: string;
+  /** pi exposes whether the session has a terminal UI; absent means non-interactive. */
+  hasUI?: boolean;
   ui: {
     notify(message: string, level?: "info" | "warning" | "error"): void;
   };
@@ -94,6 +97,14 @@ export function createLensClient(
   return { moduleReport: (file) => moduleReport(file) };
 }
 
+/** Tier 0 auto-applies only with a real terminal UI and outside CI. */
+export function isInteractiveSession(
+  ctx: Pick<SweepCommandContext, "hasUI">,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return ctx.hasUI === true && !isCiEnvironment(env);
+}
+
 export default function sweepExtension(pi: SweepHost): void {
   pi.registerCommand("sweep-report", {
     description:
@@ -107,6 +118,7 @@ export default function sweepExtension(pi: SweepHost): void {
         fullAudit: options.fullAudit,
         reportOnly: options.apply !== true,
         apply: options.apply,
+        interactive: isInteractiveSession(ctx),
         runner: createPiRunner(pi),
         lens: createLensClient(pi),
       });

@@ -5,7 +5,7 @@ import type {
 } from "./contract.ts";
 import { selectFiles } from "./diff.ts";
 import { realCommandRunner, type CommandRunner } from "./exec.ts";
-import { buildGateTable, finalizeFindings, renderGateTable } from "./gate.ts";
+import { buildGateTable, decideForPolicy, finalizeFindings, isCiEnvironment, renderGateTable, type GatePolicy } from "./gate.ts";
 import { applyFindings, renderApplyReport, type ApplyDecision, type ApplyResult } from "./apply.ts";
 import type { TestCommand } from "./test-command.ts";
 import { detect as detectJscpd } from "./adapters/jscpd.ts";
@@ -47,6 +47,12 @@ export interface SweepRequest {
   apply?: boolean;
   /** Explicit apply decision; defaults to the gate's per-finding action. */
   decide?: ApplyDecision;
+  /** True only for an interactive pi session; Tier 0 auto-applies inside one. */
+  interactive?: boolean;
+  /** CI override; defaults to detecting the `CI` environment variable. */
+  ci?: boolean;
+  /** Duplicate-block size at or above which jscpd findings are Tier 0. */
+  jscpdMinTokens?: number;
   /** Pre-resolved suite; the engine resolves the repo's declaration otherwise. */
   testCommand?: TestCommand | null;
   detectors?: Detector[];
@@ -113,6 +119,13 @@ function withDetectorStatuses(markdown: string, statuses: DetectorStatus[]): str
 
 export async function runSweep(request: SweepRequest): Promise<SweepResult> {
   const runner = request.runner ?? realCommandRunner;
+  const policy: GatePolicy = {
+    interactive: request.interactive === true,
+    ci: request.ci ?? isCiEnvironment(),
+    ...(request.jscpdMinTokens !== undefined
+      ? { jscpdMinTokens: request.jscpdMinTokens }
+      : {}),
+  };
   const selection = await selectFiles({
     cwd: request.cwd,
     runner,
@@ -147,16 +160,17 @@ export async function runSweep(request: SweepRequest): Promise<SweepResult> {
     }
   }
 
+  const gated = finalizeFindings(drafts, { policy });
   const applyResult = request.apply
     ? await applyFindings({
         cwd: request.cwd,
-        findings: finalizeFindings(drafts),
+        findings: gated,
         runner,
-        decide: request.decide,
+        decide: request.decide ?? decideForPolicy(policy),
         testCommand: request.testCommand,
       })
     : undefined;
-  const findings = applyResult?.findings ?? finalizeFindings(drafts);
+  const findings = applyResult?.findings ?? gated;
   const gate = buildGateTable(findings);
   const unavailableMessages = [...new Set(unavailable.filter(Boolean))];
   const report: SweepReport = {
