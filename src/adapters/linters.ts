@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { DetectorInput, FindingDraft } from "../contract.ts";
+import { fragmentText } from "../fragments.ts";
 import { repoPath } from "../paths.ts";
 import { runMise } from "../tools.ts";
 
@@ -264,10 +265,6 @@ function toDraft(message: NormalizedMessage): FindingDraft {
   };
 }
 
-function unusedRule(rule: string): boolean {
-  return /unused|F401|dead_code/i.test(rule);
-}
-
 function selfContainedLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) {
@@ -283,30 +280,29 @@ function selfContainedLine(line: string): boolean {
 }
 
 async function attachEdits(input: LinterInput, drafts: FindingDraft[]): Promise<FindingDraft[]> {
-  const contents = new Map<string, string[]>();
+  const contents = new Map<string, string>();
   const attached: FindingDraft[] = [];
   for (const draft of drafts) {
-    if (!unusedRule(draft.rule)) {
+    if (!/unused|F401|dead_code/i.test(draft.rule)) {
       attached.push(draft);
       continue;
     }
-    let lines = contents.get(draft.file);
-    if (!lines) {
+    let content = contents.get(draft.file);
+    if (content === undefined) {
       try {
-        lines = (await readFile(resolve(input.cwd, draft.file), "utf8")).split("\n");
+        content = await readFile(resolve(input.cwd, draft.file), "utf8");
       } catch {
         attached.push(draft);
         continue;
       }
-      contents.set(draft.file, lines);
+      contents.set(draft.file, content);
     }
-    const line = lines[draft.line - 1];
-    if (line === undefined || !selfContainedLine(line)) {
+    const fragment = fragmentText(content, draft.line, draft.line);
+    if (fragment === undefined || !selfContainedLine(fragment.replace(/\n$/, ""))) {
       attached.push(draft);
       continue;
     }
-    const trailing = draft.line < lines.length ? "\n" : "";
-    attached.push({ ...draft, edit: { oldText: `${line}${trailing}`, newText: "" } });
+    attached.push({ ...draft, edit: { oldText: fragment, newText: "" } });
   }
   return attached;
 }

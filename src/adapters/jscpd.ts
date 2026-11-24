@@ -2,6 +2,7 @@ import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { DetectorInput, FindingDraft } from "../contract.ts";
+import { fragmentText } from "../fragments.ts";
 import { repoPath } from "../paths.ts";
 import { runTool } from "../tools.ts";
 
@@ -25,19 +26,6 @@ interface JscpdClone {
 
 interface JscpdReport {
   duplicates: JscpdClone[];
-}
-
-function fragmentText(content: string, start: number, end: number): string | undefined {
-  const lines = content.split("\n");
-  if (start < 1 || end < start || start > lines.length) {
-    return undefined;
-  }
-  const selected = lines.slice(start - 1, end);
-  if (selected.length === 0) {
-    return undefined;
-  }
-  const trailing = end < lines.length ? "\n" : "";
-  return `${selected.join("\n")}${trailing}`;
 }
 
 async function readFragment(
