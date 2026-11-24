@@ -23,6 +23,8 @@ export interface Finding {
   detector: string;
   category?: string;
   proposedFix?: string;
+  /** Detector-supplied measurements used by tier policy (duplicate size, etc.). */
+  metrics?: { tokens?: number; lines?: number };
   edit?: FindingEdit;
   action?: GateAction;
   reason?: string;
