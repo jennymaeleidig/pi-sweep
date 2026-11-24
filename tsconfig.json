@@ -5,11 +5,16 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "checkJs": true,
     "skipLibCheck": true,
-    "allowJs": true
+    "allowJs": true,
+    "types": [
+      "node"
+    ]
   },
   "include": [
-    "src"
+    "src",
+    "test"
   ]
 }
