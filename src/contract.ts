@@ -7,6 +7,12 @@ export type Tier = 0 | 1 | 2;
 
 export type GateAction = "apply" | "skip" | "ask";
 
+/** A single structured text replacement a finding can apply and revert. */
+export interface FindingEdit {
+  oldText: string;
+  newText: string;
+}
+
 export interface Finding {
   id: string;
   file: string;
@@ -17,6 +23,7 @@ export interface Finding {
   detector: string;
   category?: string;
   proposedFix?: string;
+  edit?: FindingEdit;
   action?: GateAction;
   reason?: string;
 }
