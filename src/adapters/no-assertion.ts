@@ -13,6 +13,8 @@ export interface HookStatus {
 
 export const MANAGED_MARKER = "MANAGED BY pi-sweep";
 
+export const NO_ASSERTION_HOOK_ENV = "PI_SWEEP_NO_ASSERTION_HOOK";
+
 const HOOK_CANDIDATES = [
   "hooks/vitest-no-assertion/setup.ts",
   "hooks/pytest-no-assertion/conftest.py",
@@ -35,9 +37,24 @@ function isTestSource(file: string): boolean {
   return /\.(?:[cm]?[jt]sx?|py)$/.test(file);
 }
 
-/** Locate a managed no-assertion hook so an absent hook is never read as clean. */
-export function hookStatus(cwd: string): HookStatus {
-  const files = HOOK_CANDIDATES.filter((file) => {
+/**
+ * Locate a managed no-assertion hook so an absent hook is never read as
+ * clean. The `PI_SWEEP_NO_ASSERTION_HOOK` env override (absolute or
+ * repo-relative) is consulted first, then any caller-declared paths, then
+ * the default candidates.
+ */
+export function hookStatus(
+  cwd: string,
+  hookPaths: string[] = [],
+  env: Record<string, string | undefined> = process.env,
+): HookStatus {
+  const envPath = env[NO_ASSERTION_HOOK_ENV];
+  const candidates = [
+    ...(envPath ? [envPath] : []),
+    ...hookPaths,
+    ...HOOK_CANDIDATES,
+  ];
+  const files = candidates.filter((file) => {
     const path = join(cwd, file);
     if (!existsSync(path)) {
       return false;

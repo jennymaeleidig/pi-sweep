@@ -47,6 +47,8 @@ export interface DetectorInput {
   files: string[];
   cwd: string;
   runner: CommandRunner;
+  /** Extra no-assertion hook locations, consulted before the default candidates. */
+  hookPaths?: string[];
 }
 
 /** A detector's normalized output, before identity and tier policy are applied. */

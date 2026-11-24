@@ -39,6 +39,8 @@ export interface UmbrellaRequest {
   selection?: DiffSelection;
   /** Explicit mutation report path passed to the test sweep. */
   mutationReportPath?: string;
+  /** Extra no-assertion hook locations passed to the test sweep. */
+  hookPaths?: string[];
   /** Override the measured freshness baseline, mainly for tests. */
   mutationLatestChangeMs?: number;
   /** Clock used for the mutation evidence timestamp, mainly for tests. */
@@ -269,6 +271,7 @@ export async function runUmbrella(request: UmbrellaRequest): Promise<UmbrellaRes
       kind: "test",
       sweep: "test",
       selection,
+      ...(request.hookPaths ? { hookPaths: request.hookPaths } : {}),
       ...(request.mutationReportPath
         ? { mutationReportPath: request.mutationReportPath }
         : {}),

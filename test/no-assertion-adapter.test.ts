@@ -102,3 +102,40 @@ test("recognizes an installed managed hook", async (t) => {
 
   assert.equal(hookStatus(cwd).available, true);
 });
+
+test("recognizes a caller-declared custom hook path", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+  await write(cwd, "support/no-assertion/setup.ts", `// ${MANAGED_MARKER}: hook\n`);
+
+  const status = hookStatus(cwd, ["support/no-assertion/setup.ts"]);
+
+  assert.equal(status.available, true);
+  assert.deepEqual(status.files, ["support/no-assertion/setup.ts"]);
+});
+
+test("an env-declared hook path wins over the default candidates", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+  await write(cwd, "custom/no-assertion/setup.ts", `// ${MANAGED_MARKER}: hook\n`);
+
+  const status = hookStatus(cwd, [], {
+    PI_SWEEP_NO_ASSERTION_HOOK: "custom/no-assertion/setup.ts",
+  });
+
+  assert.equal(status.available, true);
+  assert.deepEqual(status.files, ["custom/no-assertion/setup.ts"]);
+});
+
+test("still reports the hook as absent when no declared path has the marker", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+  await write(cwd, "test/empty.test.ts", "test('empty', () => {});\n");
+
+  const status = hookStatus(cwd, ["support/no-assertion/setup.ts"], {
+    PI_SWEEP_NO_ASSERTION_HOOK: "also/missing.ts",
+  });
+
+  assert.equal(status.available, false);
+  assert.match(status.reason ?? "", /no-assertion hook is absent/);
+});

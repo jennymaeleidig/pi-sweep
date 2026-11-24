@@ -57,6 +57,8 @@ export interface SweepRequest {
   lens?: LensClient;
   /** Explicit mutation report path; the declaration and convention are used otherwise. */
   mutationReportPath?: string;
+  /** Extra no-assertion hook locations, consulted before the default candidates. */
+  hookPaths?: string[];
   /** Override the measured freshness baseline, mainly for tests. */
   mutationLatestChangeMs?: number;
   /** Clock used for the mutation evidence timestamp, mainly for tests. */
@@ -135,6 +137,7 @@ export async function runSweep(request: SweepRequest): Promise<SweepResult> {
       files: selection.files,
       cwd: request.cwd,
       runner,
+      ...(request.hookPaths ? { hookPaths: request.hookPaths } : {}),
     };
     if (detector.probe) {
       const availability = await detector.probe(input);

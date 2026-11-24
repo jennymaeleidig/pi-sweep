@@ -67,6 +67,12 @@ Both files carry a `MANAGED BY pi-sweep` marker. Never delete, rename, or strip
 that marker during cleanup, codemods, or a sweep; remove the hook only when
 deliberately retiring it.
 
+A repo with the hook installed elsewhere can point the sweep at it: set
+`PI_SWEEP_NO_ASSERTION_HOOK` to that file's absolute or repo-relative path, or
+pass extra `hookPaths` in the sweep request. Both are checked before the
+default candidate locations; a missing declaration still reports the hook as
+absent rather than clean.
+
 ## 2b. Mutation testing is opt-in, never per-session
 
 The sweep never runs a mutation tool. A repository that wants mutation evidence

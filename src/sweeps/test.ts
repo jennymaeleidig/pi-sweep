@@ -24,7 +24,7 @@ const noAssertionDetector: Detector = {
   name: "no-assertion",
   detect: (input) => detectNoAssertion(input),
   async unavailable(input) {
-    const status = hookStatus(input.cwd);
+    const status = hookStatus(input.cwd, input.hookPaths ?? []);
     return status.available ? [] : [status.reason ?? "managed no-assertion hook is absent"];
   },
 };
