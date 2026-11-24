@@ -51,7 +51,7 @@ test("runs only declared lint tasks over the changed files", async () => {
   ]);
 });
 
-test("attaches a delete edit for a single-line unused import", async (t) => {
+test("attaches a delete edit from the linter's reported line range", async (t) => {
   const cwd = await tempRepo();
   t.after(() => cleanup(cwd));
   await write(cwd, "src/a.ts", "import { old } from './old.ts';\nconst keep = 1;\n");
@@ -63,7 +63,16 @@ test("attaches a delete edit for a single-line unused import", async (t) => {
       stdout: JSON.stringify([
         {
           filePath: join(cwd, "src/a.ts"),
-          messages: [{ ruleId: "no-unused-vars", line: 1, message: "'old' is never used" }],
+          messages: [
+            {
+              ruleId: "no-unused-vars",
+              line: 1,
+              column: 1,
+              endLine: 1,
+              endColumn: 32,
+              message: "'old' is never used",
+            },
+          ],
         },
       ]),
       stderr: "",
@@ -79,6 +88,117 @@ test("attaches a delete edit for a single-line unused import", async (t) => {
   });
 });
 
+test("prefers the linter's own delete fix over a re-derived range", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+  const source = "import { old } from './old.ts';\nconst keep = 1;\n";
+  await write(cwd, "src/a.ts", source);
+  const runner: CommandRunner = async (_command, args) => {
+    if (args[0] === "tasks") {
+      return { stdout: tasks([{ name: "lint" }]), stderr: "", code: 0 };
+    }
+    return {
+      stdout: JSON.stringify([
+        {
+          filePath: join(cwd, "src/a.ts"),
+          source,
+          messages: [
+            {
+              ruleId: "unused-imports/no-unused-imports",
+              line: 1,
+              column: 1,
+              endLine: 1,
+              endColumn: 32,
+              message: "'old' is defined but never used",
+              fix: { range: [0, 31], text: "" },
+            },
+          ],
+        },
+      ]),
+      stderr: "",
+      code: 1,
+    };
+  };
+
+  const drafts = await detect({ files: ["src/a.ts"], cwd, runner });
+
+  assert.deepEqual(drafts[0]?.edit, {
+    oldText: "import { old } from './old.ts';\n",
+    newText: "",
+  });
+});
+
+test("leaves a partial-line finding without an edit", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+  await write(cwd, "src/a.ts", "import { old } from './old.ts';\nconst keep = 1;\n");
+  const runner: CommandRunner = async (_command, args) => {
+    if (args[0] === "tasks") {
+      return { stdout: tasks([{ name: "lint" }]), stderr: "", code: 0 };
+    }
+    return {
+      stdout: JSON.stringify([
+        {
+          filePath: join(cwd, "src/a.ts"),
+          messages: [
+            {
+              ruleId: "no-unused-vars",
+              line: 1,
+              column: 10,
+              endLine: 1,
+              endColumn: 13,
+              message: "'old' is never used",
+            },
+          ],
+        },
+      ]),
+      stderr: "",
+      code: 1,
+    };
+  };
+
+  const drafts = await detect({ files: ["src/a.ts"], cwd, runner });
+
+  assert.equal(drafts[0]?.edit, undefined);
+});
+
+test("never attaches an edit for a non-allowlisted rule", async (t) => {
+  const cwd = await tempRepo();
+  t.after(() => cleanup(cwd));
+  const source = "console.log('debug');\n";
+  await write(cwd, "src/a.ts", source);
+  const runner: CommandRunner = async (_command, args) => {
+    if (args[0] === "tasks") {
+      return { stdout: tasks([{ name: "lint" }]), stderr: "", code: 0 };
+    }
+    return {
+      stdout: JSON.stringify([
+        {
+          filePath: join(cwd, "src/a.ts"),
+          source,
+          messages: [
+            {
+              ruleId: "no-console",
+              line: 1,
+              column: 1,
+              endLine: 1,
+              endColumn: 23,
+              message: "Unexpected console statement",
+              fix: { range: [0, 22], text: "" },
+            },
+          ],
+        },
+      ]),
+      stderr: "",
+      code: 1,
+    };
+  };
+
+  const drafts = await detect({ files: ["src/a.ts"], cwd, runner });
+
+  assert.equal(drafts[0]?.edit, undefined);
+});
+
 test("leaves a multiline unused declaration without an edit", async (t) => {
   const cwd = await tempRepo();
   t.after(() => cleanup(cwd));
@@ -91,7 +211,16 @@ test("leaves a multiline unused declaration without an edit", async (t) => {
       stdout: JSON.stringify([
         {
           filePath: join(cwd, "src/a.ts"),
-          messages: [{ ruleId: "no-unused-vars", line: 1, message: "'value' is never used" }],
+          messages: [
+            {
+              ruleId: "no-unused-vars",
+              line: 1,
+              column: 7,
+              endLine: 3,
+              endColumn: 3,
+              message: "'value' is never used",
+            },
+          ],
         },
       ]),
       stderr: "",

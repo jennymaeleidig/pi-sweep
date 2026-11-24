@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { DetectorInput, FindingDraft } from "../contract.ts";
+import type { DetectorInput, FindingDraft, FindingEdit } from "../contract.ts";
 import { fragmentText } from "../fragments.ts";
 import { repoPath } from "../paths.ts";
 import { runMise } from "../tools.ts";
@@ -18,17 +18,27 @@ interface NormalizedMessage {
   line: number;
   rule: string;
   message: string;
+  endLine?: number;
+  column?: number;
+  endColumn?: number;
+  /** The linter's own delete fix, resolved to its exact text from `source`. */
+  fixText?: string;
 }
 
 interface EslintMessage {
   ruleId?: unknown;
   message?: unknown;
   line?: unknown;
+  column?: unknown;
+  endLine?: unknown;
+  endColumn?: unknown;
+  fix?: unknown;
 }
 
 interface EslintFile {
   filePath?: unknown;
   messages?: unknown;
+  source?: unknown;
 }
 
 interface SarifResult {
@@ -66,6 +76,29 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
+function positiveNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
+/** Resolve a pure-delete ESLint fix to its exact text using the file's `source`. */
+function resolveFixText(fix: unknown, source: string | undefined): string | undefined {
+  const record = asRecord(fix);
+  const range = record?.range;
+  if (
+    !record ||
+    record.text !== "" ||
+    !source ||
+    !Array.isArray(range) ||
+    !range.every((offset) => typeof offset === "number")
+  ) {
+    return undefined;
+  }
+  const [start, end] = range as [number, number];
+  return source.slice(start, end);
+}
+
 function fromEslint(value: unknown, cwd: string): NormalizedMessage[] {
   if (!Array.isArray(value)) {
     return [];
@@ -77,14 +110,28 @@ function fromEslint(value: unknown, cwd: string): NormalizedMessage[] {
       continue;
     }
     const path = repoPath(cwd, file.filePath);
+    const source = typeof file.source === "string" ? file.source : undefined;
     for (const rawMessage of file.messages) {
       const message = asRecord(rawMessage) as EslintMessage | undefined;
       if (!message || typeof message.message !== "string") {
         continue;
       }
-      const line = typeof message.line === "number" && message.line > 0 ? message.line : 1;
+      const line = positiveNumber(message.line) ?? 1;
       const rule = typeof message.ruleId === "string" && message.ruleId ? message.ruleId : "lint";
-      messages.push({ file: path, line, rule, message: message.message });
+      const endLine = positiveNumber(message.endLine);
+      const column = positiveNumber(message.column);
+      const endColumn = positiveNumber(message.endColumn);
+      const fixText = resolveFixText(message.fix, source);
+      messages.push({
+        file: path,
+        line,
+        rule,
+        message: message.message,
+        ...(endLine !== undefined ? { endLine } : {}),
+        ...(column !== undefined ? { column } : {}),
+        ...(endColumn !== undefined ? { endColumn } : {}),
+        ...(fixText !== undefined ? { fixText } : {}),
+      });
     }
   }
   return messages;
@@ -279,42 +326,77 @@ function selfContainedLine(line: string): boolean {
   return trimmed.endsWith(";");
 }
 
-async function attachEdits(input: LinterInput, drafts: FindingDraft[]): Promise<FindingDraft[]> {
-  const contents = new Map<string, string>();
-  const attached: FindingDraft[] = [];
-  for (const draft of drafts) {
-    if (!/unused|F401|dead_code/i.test(draft.rule)) {
-      attached.push(draft);
-      continue;
-    }
-    let content = contents.get(draft.file);
-    if (content === undefined) {
-      try {
-        content = await readFile(resolve(input.cwd, draft.file), "utf8");
-      } catch {
-        attached.push(draft);
-        continue;
-      }
-      contents.set(draft.file, content);
-    }
-    const fragment = fragmentText(content, draft.line, draft.line);
-    if (fragment === undefined || !selfContainedLine(fragment.replace(/\n$/, ""))) {
-      attached.push(draft);
-      continue;
-    }
-    attached.push({ ...draft, edit: { oldText: fragment, newText: "" } });
+/**
+ * The delete edit for an allowlisted unused-symbol rule, derived from what the
+ * linter itself reported — never from re-matching the file text by regex.
+ *
+ * ESLint's JSON formatter includes a message-level `fix` and a per-file
+ * `source` for fixable rules (verified against the pinned eslint 9.39.5, so
+ * `--fix-dry-run` adds nothing), which resolves to the exact deleted text;
+ * rules that only suggest (core `no-unused-vars`) fall back to the reported
+ * endLine/endColumn range. Either way the edit is attached only when the
+ * reported range covers a whole, self-contained import or declaration line.
+ */
+function deleteEdit(
+  content: string,
+  message: NormalizedMessage,
+): FindingEdit | undefined {
+  if (message.endLine !== undefined && message.endLine !== message.line) {
+    return undefined;
   }
-  return attached;
+  const fragment = fragmentText(content, message.line, message.line);
+  if (fragment === undefined) {
+    return undefined;
+  }
+  const line = fragment.replace(/\n$/, "");
+  const covered =
+    message.fixText !== undefined
+      ? message.fixText.trim() === line.trim()
+      : message.column !== undefined &&
+        message.endColumn !== undefined &&
+        line.slice(message.column - 1, message.endColumn).trim() === line.trim();
+  if (!covered || !selfContainedLine(line)) {
+    return undefined;
+  }
+  return { oldText: fragment, newText: "" };
 }
 
-function dedupe(drafts: FindingDraft[]): FindingDraft[] {
+async function attachEdits(
+  input: LinterInput,
+  messages: NormalizedMessage[],
+): Promise<FindingDraft[]> {
+  const contents = new Map<string, string>();
+  const drafts: FindingDraft[] = [];
+  for (const message of messages) {
+    const draft = toDraft(message);
+    if (!/unused|F401|dead_code/i.test(message.rule)) {
+      drafts.push(draft);
+      continue;
+    }
+    let content = contents.get(message.file);
+    if (content === undefined) {
+      try {
+        content = await readFile(resolve(input.cwd, message.file), "utf8");
+      } catch {
+        drafts.push(draft);
+        continue;
+      }
+      contents.set(message.file, content);
+    }
+    const edit = deleteEdit(content, message);
+    drafts.push(edit ? { ...draft, edit } : draft);
+  }
+  return drafts;
+}
+
+function dedupe(messages: NormalizedMessage[]): NormalizedMessage[] {
   const seen = new Set<string>();
-  const unique: FindingDraft[] = [];
-  for (const draft of drafts) {
-    const key = `${draft.file}:${draft.line}:${draft.rule}:${draft.evidence}`;
+  const unique: NormalizedMessage[] = [];
+  for (const message of messages) {
+    const key = `${message.file}:${message.line}:${message.rule}:${message.message}`;
     if (!seen.has(key)) {
       seen.add(key);
-      unique.push(draft);
+      unique.push(message);
     }
   }
   return unique;
@@ -335,7 +417,7 @@ export async function detect(input: LinterInput): Promise<FindingDraft[]> {
     return [];
   }
 
-  const drafts: FindingDraft[] = [];
+  const selectedMessages: NormalizedMessage[] = [];
   for (const task of tasks) {
     const result = await runMise(
       input.runner,
@@ -346,9 +428,9 @@ export async function detect(input: LinterInput): Promise<FindingDraft[]> {
     const messages = stdout.length > 0 ? stdout : parseOutput(result.stderr, input.cwd);
     for (const message of messages) {
       if (selected.has(message.file)) {
-        drafts.push(toDraft(message));
+        selectedMessages.push(message);
       }
     }
   }
-  return attachEdits(input, dedupe(drafts));
+  return attachEdits(input, dedupe(selectedMessages));
 }
