@@ -79,13 +79,15 @@ export function neverEditReason(path: string): string | null {
   return null;
 }
 
-export function isProseFile(path: string): boolean {
-  if (neverEditReason(path) !== null) {
-    return false;
-  }
+/** Whether the path has a prose extension, regardless of edit exclusions. */
+export function isProsePath(path: string): boolean {
   const name = segments(path).at(-1) ?? "";
   const dot = name.lastIndexOf(".");
   return dot > 0 && PROSE_EXTENSIONS.has(name.slice(dot).toLowerCase());
+}
+
+export function isProseFile(path: string): boolean {
+  return neverEditReason(path) === null && isProsePath(path);
 }
 
 /** Paths a prose detector may read and a prose apply may rewrite. */

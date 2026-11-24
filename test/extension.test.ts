@@ -22,6 +22,23 @@ test("parses a sweep kind, basepoint, and full-audit flag", () => {
   assert.throws(() => parseSweepArgs("--base"), /--base needs a ref/);
 });
 
+test("registers /sweep and keeps /sweep-report as an alias", () => {
+  const names: string[] = [];
+  const handlers: Array<(args: string, ctx: SweepCommandContext) => Promise<void> | void> = [];
+  const pi: SweepHost = {
+    exec: (command, args, options) => realCommandRunner(command, args, options),
+    registerCommand: (name, options) => {
+      names.push(name);
+      handlers.push(options.handler);
+    },
+  };
+
+  sweepExtension(pi);
+
+  assert.deepEqual(names, ["sweep", "sweep-report"]);
+  assert.equal(handlers[0], handlers[1]);
+});
+
 test("registers a command that reports findings through the pipeline", async (t) => {
   const cwd = await tempRepo();
   t.after(() => cleanup(cwd));

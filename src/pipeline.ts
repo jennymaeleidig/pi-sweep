@@ -1,9 +1,11 @@
 import type {
   DetectorStatus,
   FindingDraft,
+  SweepCharter,
   SweepReport,
 } from "./contract.ts";
-import { selectFiles } from "./diff.ts";
+import { selectFiles, type DiffSelection } from "./diff.ts";
+import { applyWithinCharter } from "./charter.ts";
 import { realCommandRunner, type CommandRunner } from "./exec.ts";
 import { buildGateTable, finalizeFindings, renderGateTable } from "./gate.ts";
 import { applyFindings, renderApplyReport, type ApplyDecision, type ApplyResult } from "./apply.ts";
@@ -14,7 +16,7 @@ import { codeDetectors } from "./sweeps/code.ts";
 import { testDetectors } from "./sweeps/test.ts";
 import { proseDetectors } from "./sweeps/prose.ts";
 
-export type SweepKind = "sweep" | "code" | "test" | "prose";
+export type SweepKind = "sweep" | SweepCharter;
 
 export interface DetectorInput {
   files: string[];
@@ -51,6 +53,10 @@ export interface SweepRequest {
   testCommand?: TestCommand | null;
   detectors?: Detector[];
   lens?: LensClient;
+  /** Pre-resolved selection, so an umbrella runs every sweep over one snapshot. */
+  selection?: DiffSelection;
+  /** Origin charter stamped onto drafts when the caller runs one sweep of several. */
+  sweep?: SweepCharter;
 }
 
 export interface SweepResult {
@@ -113,12 +119,14 @@ function withDetectorStatuses(markdown: string, statuses: DetectorStatus[]): str
 
 export async function runSweep(request: SweepRequest): Promise<SweepResult> {
   const runner = request.runner ?? realCommandRunner;
-  const selection = await selectFiles({
-    cwd: request.cwd,
-    runner,
-    base: request.base,
-    fullAudit: request.fullAudit,
-  });
+  const selection =
+    request.selection ??
+    (await selectFiles({
+      cwd: request.cwd,
+      runner,
+      base: request.base,
+      fullAudit: request.fullAudit,
+    }));
 
   const detectors = request.detectors ?? detectorsFor(request.kind, { lens: request.lens });
   const drafts: FindingDraft[] = [];
@@ -147,16 +155,24 @@ export async function runSweep(request: SweepRequest): Promise<SweepResult> {
     }
   }
 
+  const origin =
+    request.sweep ?? (request.kind === "sweep" ? undefined : request.kind);
+  const tagged = origin
+    ? drafts.map((draft) => (draft.sweep ? draft : { ...draft, sweep: origin }))
+    : drafts;
+  const finalized = finalizeFindings(tagged);
+  const applyCandidates =
+    request.kind === "sweep" ? finalized : applyWithinCharter(request.kind, finalized);
   const applyResult = request.apply
     ? await applyFindings({
         cwd: request.cwd,
-        findings: finalizeFindings(drafts),
+        findings: applyCandidates,
         runner,
         decide: request.decide,
         testCommand: request.testCommand,
       })
     : undefined;
-  const findings = applyResult?.findings ?? finalizeFindings(drafts);
+  const findings = applyResult?.findings ?? finalized;
   const gate = buildGateTable(findings);
   const unavailableMessages = [...new Set(unavailable.filter(Boolean))];
   const report: SweepReport = {

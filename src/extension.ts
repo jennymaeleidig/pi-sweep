@@ -1,4 +1,5 @@
 import { runSweep, type SweepKind } from "./pipeline.ts";
+import { runUmbrella } from "./umbrella.ts";
 import type { CommandOptions, CommandRunner } from "./exec.ts";
 import type { LensClient, ModuleReport } from "./adapters/zero-fanout.ts";
 
@@ -95,22 +96,33 @@ export function createLensClient(
 }
 
 export default function sweepExtension(pi: SweepHost): void {
+  const handler = async (args: string, ctx: SweepCommandContext) => {
+    const options = parseSweepArgs(args);
+    const request = {
+      cwd: ctx.cwd,
+      base: options.base,
+      fullAudit: options.fullAudit,
+      reportOnly: options.apply !== true,
+      apply: options.apply,
+      runner: createPiRunner(pi),
+      lens: createLensClient(pi),
+    };
+    const result =
+      options.kind === "sweep"
+        ? await runUmbrella(request)
+        : await runSweep({ ...request, kind: options.kind });
+    ctx.ui.notify(result.markdown, "info");
+  };
+
+  pi.registerCommand("sweep", {
+    description:
+      "Run code, test, and prose sweeps over one basepoint and merge their gate tables",
+    handler,
+  });
+  // Kept as an alias so existing invocations keep working with one implementation.
   pi.registerCommand("sweep-report", {
     description:
       "Sweep code, test, or prose over the current change (report-only unless --apply)",
-    handler: async (args, ctx) => {
-      const options = parseSweepArgs(args);
-      const result = await runSweep({
-        kind: options.kind,
-        cwd: ctx.cwd,
-        base: options.base,
-        fullAudit: options.fullAudit,
-        reportOnly: options.apply !== true,
-        apply: options.apply,
-        runner: createPiRunner(pi),
-        lens: createLensClient(pi),
-      });
-      ctx.ui.notify(result.markdown, "info");
-    },
+    handler,
   });
 }
