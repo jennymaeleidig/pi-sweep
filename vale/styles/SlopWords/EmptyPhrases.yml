@@ -1,0 +1,21 @@
+extends: existence
+message: "Often-empty phrase '%s'; cut it unless it earns its place."
+level: warning
+ignorecase: true
+tokens:
+  - "it's worth noting"
+  - "it's important to note"
+  - "at the end of the day"
+  - "when it comes to"
+  - "at its core"
+  - "in today's world"
+  - "in the age of"
+  - "in the world of"
+  - "the reality is"
+  - "the truth is"
+  - "in terms of"
+  - "with regard to"
+  - "in order to"
+  - "going forward"
+  - "in this article"
+  - "let's dive in"

@@ -12,6 +12,7 @@ import { detect as detectJscpd } from "./adapters/jscpd.ts";
 import type { LensClient } from "./adapters/zero-fanout.ts";
 import { codeDetectors } from "./sweeps/code.ts";
 import { testDetectors } from "./sweeps/test.ts";
+import { proseDetectors } from "./sweeps/prose.ts";
 
 export type SweepKind = "sweep" | "code" | "test" | "prose";
 
@@ -86,13 +87,14 @@ export function detectorsFor(
         jscpdDetector,
         ...codeDetectors(options),
         ...testDetectors(),
+        ...proseDetectors(),
       ]);
     case "code":
       return codeDetectors(options);
     case "test":
       return testDetectors();
     case "prose":
-      return [];
+      return proseDetectors();
   }
 }
 

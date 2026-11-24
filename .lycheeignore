@@ -1,0 +1,8 @@
+# External links are never network-checked. Lychee runs with --offline and
+# ignores every URL with a scheme; only local files, anchors, and fragments
+# are verified.
+^https?://
+^ftp://
+^ftps://
+^mailto:
+^tel:
