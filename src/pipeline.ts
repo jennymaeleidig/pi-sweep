@@ -3,6 +3,7 @@ import { selectFiles } from "./diff.ts";
 import { realCommandRunner, type CommandRunner } from "./exec.ts";
 import { buildGateTable, finalizeFindings, renderGateTable } from "./gate.ts";
 import { detect as detectJscpd } from "./adapters/jscpd.ts";
+import { proseDetectors } from "./sweeps/prose.ts";
 
 export type SweepKind = "sweep" | "code" | "test" | "prose";
 
@@ -44,7 +45,7 @@ export function detectorsFor(kind: SweepKind): Detector[] {
     case "test":
       return [jscpdDetector];
     case "prose":
-      return [];
+      return proseDetectors();
   }
 }
 
