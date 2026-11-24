@@ -1,0 +1,16 @@
+extends: existence
+message: "Often-empty adverb '%s'; cut it unless it carries emphasis."
+level: warning
+ignorecase: true
+tokens:
+  - "just"
+  - "literally"
+  - "honestly"
+  - "simply"
+  - "actually"
+  - "truly"
+  - "fundamentally"
+  - "importantly"
+  - "crucially"
+  - "inherently"
+  - "inevitably"
